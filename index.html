@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Core Breakers">
+<meta name="theme-color" content="#0c0f16">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Core Breakers</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="lvlBadge"><b id="tbLvl">1</b><div class="xp"><i id="tbXp"></i><span id="tbXpTxt"></span></div></div>
+    <div class="pill tro">🏆 <b id="tbTro">0</b></div>
+    <div class="pill gold">🪙 <b id="tbGold">0</b></div>
+  </div>
+
+  <section class="screen on" id="home">
+    <div class="side">
+      <div class="sideChest" id="freeChest"></div>
+      <div class="sideChest" id="crownChest"></div>
+    </div>
+    <div id="arenaPic"><div class="logo">CORE<br>BREAKERS</div></div>
+    <div class="arenaInfo"><h2 id="arenaName"></h2><div class="tbar"><i id="trophyBar"></i></div><p id="arenaNext"></p></div>
+    <button class="btn battle" id="battleBtn">BATTLE</button>
+    <div id="slots"></div>
+  </section>
+
+  <section class="screen" id="cards">
+    <h2 class="hdr">Battle Deck</h2>
+    <p class="sub" id="deckInfo"></p>
+    <div class="grid" id="deck"></div>
+    <h2 class="hdr">Collection</h2>
+    <div class="grid" id="collection"></div>
+  </section>
+
+  <section class="screen" id="shop">
+    <h2 class="hdr">Daily Deals</h2><p class="sub" id="shopReset"></p>
+    <div class="offers" id="offers"></div>
+    <h2 class="hdr">Chests</h2>
+    <div class="offers" id="shopChests"></div>
+  </section>
+
+  <section class="screen" id="settings">
+    <h2 class="hdr">Settings</h2>
+    <div class="setList">
+      <button class="btn wide" id="setName">Change name</button>
+      <button class="btn wide" id="setSound">Sound</button>
+      <button class="btn wide" id="setBackup">Make backup code</button>
+      <button class="btn wide" id="setRestore">Restore from backup code</button>
+      <p class="sub" id="setStats"></p>
+      <button class="btn wide danger" id="setReset">Start over</button>
+    </div>
+  </section>
+
+  <section class="screen" id="battle">
+    <div id="bTop"><div class="who them"><span id="bThem"></span><b id="crThem">0</b>👑</div><div id="bTimer">3:00</div><div class="who me"><b id="crMe">0</b>👑<span id="bMe"></span></div></div>
+    <div id="field"><canvas id="arena"></canvas></div>
+    <div id="bBottom">
+      <div id="nextWrap"><small>Next</small><div id="nextCard"></div></div>
+      <div id="hand"></div>
+    </div>
+    <div id="eBar"><div class="eIcon">⚡<b id="eNum">5</b></div><div class="eTrack"><i id="eFill"></i><div class="ticks"></div></div></div>
+  </section>
+
+  <nav id="nav">
+    <button data-go="shop"><span>🛒</span>Shop</button>
+    <button data-go="cards"><span>🃏</span>Cards<em class="badge"></em></button>
+    <button data-go="home" class="on"><span>⚔️</span>Battle</button>
+    <button data-go="settings"><span>⚙️</span>Settings</button>
+  </nav>
+</div>
+<div id="modal"></div>
+<div id="chestOpen"><div id="coStage"></div></div>
+<div id="result"></div>
+<div id="toast"></div>
+<div id="loading"><div class="logo">CORE<br>BREAKERS</div><div class="lbar"><i id="lfill"></i></div><p>Loading robots…</p></div>
+<script src="js/data.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>
