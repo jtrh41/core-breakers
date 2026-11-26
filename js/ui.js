@@ -289,12 +289,30 @@
   function toast(t) { const e = $('toast'); e.textContent = t; e.classList.remove('on'); void e.offsetWidth; e.classList.add('on'); }
   UI.toast = toast; UI.modal = modal; UI.closeModal = closeModal;
 
+  // ---------- share: QR code of the public link, drawn offline ----------
+  const SHARE_URL = 'https://jtrh41.github.io/core-breakers/';
+  function qrSvg(text) {
+    try { const q = qrcode(0, 'M'); q.addData(text); q.make(); const n = q.getModuleCount(); let d = '';
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += 'M' + x + ' ' + y + 'h1v1h-1z';
+      return `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${d}" fill="#0c0f16"/></svg>`;
+    } catch (e) { return ''; }
+  }
+  UI.share = () => {
+    modal(`<h2>Share Core Breakers</h2><p class="dim">Scan with a phone or iPad camera, open in Safari, then Share → Add to Home Screen.</p>
+      <div class="qrBox">${qrSvg(SHARE_URL)}</div><p class="shareUrl">${SHARE_URL}</p>`,
+      [[navigator.share ? 'Send link' : 'Copy link', () => {
+        if (navigator.share) navigator.share({ title: 'Core Breakers', text: 'Robot card battles! Add it to your Home Screen.', url: SHARE_URL }).catch(() => { });
+        else { try { navigator.clipboard.writeText(SHARE_URL).then(() => toast('Link copied'), () => toast(SHARE_URL)); } catch (e) { toast(SHARE_URL); } }
+      }]]);
+  };
+
   // ---------- boot ----------
   UI.boot = () => {
     document.querySelectorAll('#nav button').forEach(b => b.onclick = () => UI.show(b.dataset.go));
     $('battleBtn').onclick = () => UI.battle();
     $('freeChest').onclick = () => { if (P.freeReady()) openResult(P.openFree()); else toast('Free chest in ' + tleft(P.s.freeAt - Date.now())); };
     $('crownChest').onclick = () => { if (P.crownReady()) openResult(P.openCrown()); else toast('Win crowns in battle: ' + (CB.CROWNS_FOR_CHEST - P.s.crowns) + ' more for a Crown Chest'); };
+    $('setShare').onclick = UI.share; $('tbShare').onclick = UI.share;
     $('setSound').onclick = () => { P.s.sound = !P.s.sound; P.save(); settings(); };
     $('setName').onclick = () => modal(`<h2>Your name</h2><input id="nmIn" maxlength="16" value="${P.s.name.replace(/"/g, '')}">`, [['Save', () => { const v = $('nmIn').value.trim(); if (v) { P.s.name = v; P.save(); } closeModal(); }]]);
     $('setBackup').onclick = () => {

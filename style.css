@@ -183,3 +183,8 @@ textarea{height:110px;font-size:11px;word-break:break-all}
 .lbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2a63e8,#38e6ff);transition:width .2s}
 #loading p{color:var(--dim);font-size:13px}
 @media (min-width:700px){.grid{grid-template-columns:repeat(4,minmax(0,130px));justify-content:center}.offers{grid-template-columns:repeat(3,minmax(0,170px));justify-content:center}}
+.btn.wide.share{background:linear-gradient(#38e6ff,#1f8fd0);color:#062033;box-shadow:0 4px 0 #0c4a70}
+.shareBtn{font-size:16px;padding:5px 10px}
+.qrBox{background:#fff;border-radius:16px;padding:14px;width:min(280px,80vw);margin:10px auto}
+.qrBox svg{display:block;width:100%;height:auto}
+.shareUrl{font-size:12px;color:var(--dim);word-break:break-all}

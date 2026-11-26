@@ -20,6 +20,7 @@
     <div class="lvlBadge"><b id="tbLvl">1</b><div class="xp"><i id="tbXp"></i><span id="tbXpTxt"></span></div></div>
     <div class="pill tro">🏆 <b id="tbTro">0</b></div>
     <div class="pill gold">🪙 <b id="tbGold">0</b></div>
+    <button class="pill shareBtn" id="tbShare" aria-label="Share the game">📲</button>
   </div>
 
   <section class="screen on" id="home">
@@ -51,6 +52,7 @@
   <section class="screen" id="settings">
     <h2 class="hdr">Settings</h2>
     <div class="setList">
+      <button class="btn wide share" id="setShare">📲 Share the game (QR code)</button>
       <button class="btn wide" id="setName">Change name</button>
       <button class="btn wide" id="setSound">Sound</button>
       <button class="btn wide" id="setBackup">Make backup code</button>
@@ -82,6 +84,7 @@
 <div id="result"></div>
 <div id="toast"></div>
 <div id="loading"><div class="logo">CORE<br>BREAKERS</div><div class="lbar"><i id="lfill"></i></div><p>Loading robots…</p></div>
+<script src="js/qrcode-gen.js"></script>
 <script src="js/data.js"></script>
 <script src="js/sheets.js"></script>
 <script src="js/progress.js"></script>
