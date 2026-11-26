@@ -96,9 +96,9 @@
     };
     for (const tm of [0, 1]) {
       const fy = y => tm ? H - y : y;
-      G.ents.push(mkTower(tm, 'guard', 3.5, fy(25.5), 0, tm ? cmdAi : cmdMe));
-      G.ents.push(mkTower(tm, 'guard', 14.5, fy(25.5), 1, tm ? cmdAi : cmdMe));
-      G.ents.push(mkTower(tm, 'king', 9, fy(29), -1, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'guard', 3.5, fy(26.5), 0, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'guard', 14.5, fy(26.5), 1, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'king', 9, fy(28.5), -1, tm ? cmdAi : cmdMe));
     }
     renderHand(); layout(); buildBg();
     B.running = true; last = performance.now(); acc = 0;
@@ -225,7 +225,7 @@
     } else if (G.overtime && G.time <= 0) return end();
     const mult = G.overtime ? 3 : G.time <= CB.DOUBLE_AT ? 2 : 1;
     if (!G.overtime && G.time <= CB.DOUBLE_AT && G.time + dt > CB.DOUBLE_AT) say('Double energy!', 1.8, '#d9a0ff');
-    for (const tm of [0, 1]) G.energy[tm] = Math.min(CB.ENERGY_MAX, G.energy[tm] + CB.ENERGY_RATE * mult * dt);
+    for (const tm of [0, 1]) G.energy[tm] = Math.min(CB.ENERGY_MAX, G.energy[tm] + CB.ENERGY_RATE * mult * dt * (tm ? (G.opt.enemy.emul || 1) : 1));
 
     for (const u of G.ents) if (u.alive) think(u, dt);
     separate(dt);
@@ -524,9 +524,9 @@
       ai: { think: 1.5, lvl: opt.enemy.skill }, ai0: { think: 1.5, lvl: opt.skill }, arena: 0, sim: true };
     for (const tm of [0, 1]) {
       const fy = y => tm ? H - y : y;
-      G.ents.push(mkTower(tm, 'guard', 3.5, fy(25.5), 0, tm ? opt.enemy.cmd : opt.cmd));
-      G.ents.push(mkTower(tm, 'guard', 14.5, fy(25.5), 1, tm ? opt.enemy.cmd : opt.cmd));
-      G.ents.push(mkTower(tm, 'king', 9, fy(29), -1, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'guard', 3.5, fy(26.5), 0, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'guard', 14.5, fy(26.5), 1, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'king', 9, fy(28.5), -1, tm ? opt.enemy.cmd : opt.cmd));
     }
     let res = null; opt.onEnd = r => { res = r; };
     let n = 0;
@@ -624,7 +624,7 @@
     for (let i = 0; i < 6; i++) { const x = ((G.t * 1.3 + i * 3.3) % (W + 2)) - 1; c.fillRect(sx(x), sy(MIDY) - 1, T * 1.4, 2); }
     c.globalAlpha = 1;
     drawPlacement(c);
-    for (const d of G.decals) B.drawSprite(c, d.sub === 'king' ? 'kingx' : 'guardx', TEAM[d.team], 'i0', 0, sx(d.x), sy(d.y), T);
+    for (const d of G.decals) B.drawSprite(c, d.sub === 'king' ? 'kingx' : 'guardx', TEAM[d.team], 'i0', 0, sx(d.x), sy(d.y), T * 0.85);
     // shadows
     for (const e of G.ents) if (e.alive && e.kind !== 'tower') { c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), e.r * T * 1.05, e.r * T * 0.62, 0, 0, 7); c.fill(); }
     // spells in flight
@@ -644,7 +644,7 @@
     if (e.kind === 'tower') {
       let lab = e.fireT < 0.12 ? 'a0' : e.fireT < 0.24 ? 'a1' : 'i0';
       const team = TEAM[e.team];
-      if (!B.drawSprite(c, e.sub, team, lab, e.face, x, y, T)) fallback(c, e, x, y);
+      if (!B.drawSprite(c, e.sub, team, lab, e.face, x, y, T * 0.85)) fallback(c, e, x, y);
       if (e.sub === 'king' && !e.active) { c.fillStyle = 'rgba(255,255,255,.8)'; c.font = `bold ${T * 0.6}px system-ui`; c.textAlign = 'center'; c.fillText('z', x + T * 1.4, y - T * 2.4 - Math.sin(G.t * 2) * 3); }
       if (e.flash > 0) { c.globalAlpha = e.flash * 3; c.fillStyle = '#fff'; c.beginPath(); c.ellipse(x, y - T * 1.5, e.r * T, e.r * T * 1.2, 0, 0, 7); c.fill(); c.globalAlpha = 1; }
       return;
@@ -683,7 +683,7 @@
   function drawBar(c, e) {
     if (e.kind === 'tower') {
       if (!e.alive) return;
-      const w = T * (e.sub === 'king' ? 3 : 2.4), x = sx(e.x) - w / 2, y = sy(e.y) - T * (e.sub === 'king' ? 5.0 : 4.0);
+      const w = T * (e.sub === 'king' ? 3 : 2.4), x = sx(e.x) - w / 2, y = sy(e.y) - T * (e.sub === 'king' ? 4.4 : 3.5);
       c.fillStyle = 'rgba(0,0,0,.6)'; rr(c, x - 2, y - 2, w + 4, T * 0.42 + 4, 4); c.fill();
       c.fillStyle = e.team ? '#e5483a' : '#3aa0ff'; rr(c, x, y, w * Math.max(0, e.hp / e.maxHp), T * 0.42, 3); c.fill();
       c.fillStyle = '#fff'; c.font = `bold ${Math.max(9, T * 0.36)}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';

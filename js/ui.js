@@ -259,7 +259,7 @@
     UI.show('battle');
     CB.B.start({
       deck: s.deck.slice(), levels: myLv, cmd: s.cmd, arena: a,
-      enemy: { deck: [...pick], levels: aiLv, cmd: Math.max(1, s.cmd + (Math.random() < 0.3 ? -1 : 0)), skill: Math.min(1, 0.35 + a * 0.15 + inArena * 0.1) },
+      enemy: { deck: [...pick], levels: aiLv, cmd: Math.max(1, s.cmd + (Math.random() < 0.3 ? -1 : 0)), skill: Math.min(1, 0.35 + a * 0.15 + inArena * 0.1), emul: s.trophies < 150 ? 0.8 : s.trophies < 300 ? 0.9 : 1 },
       onEnd: res => { CB.B.stop(); results(res, name); },
     });
   };
