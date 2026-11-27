@@ -85,7 +85,7 @@
     const nxt = CB.ARENAS[a + 1];
     $('arenaNext').innerHTML = nxt ? `Next arena at <b>${nxt.trophies}</b> 🏆` : 'Top arena reached!';
     $('arenaPic').style.setProperty('--ag', A.glow); $('arenaPic').style.setProperty('--af', A.floor);
-    $('arenaPic').style.backgroundImage = CB.ARENA_META ? `url(art/arena_${a}.webp)` : '';
+    $('arenaPic').style.backgroundImage = CB.ARENA_META ? `url(art/arena_${a}.webp?v=${CB.ARENA_V || '1'})` : '';
     $('trophyBar').style.width = nxt ? Math.min(100, (s.trophies - A.trophies) / (nxt.trophies - A.trophies) * 100) + '%' : '100%';
     // free + crown chest
     const fr = $('freeChest'); fr.innerHTML = '';

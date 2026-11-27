@@ -15,14 +15,25 @@
 
   // ---------------- sprites ----------------
   const SPR = {};
+  // Each sheet is requested with its content version (?v=), so an old offline copy can never be paired with new frame data.
+  // If an image still arrives with the wrong size, it is fetched again past every cache.
   B.loadSprites = (onProgress) => new Promise(res => {
     const sheets = CB.SHEETS || {}; const names = [];
     for (const n in sheets) for (const t of TEAM) names.push([n, t]);
     let left = names.length; if (!left) return res();
     names.forEach(([n, t]) => {
-      const img = new Image(); img.decoding = 'async';
-      img.onload = img.onerror = () => { if (img.naturalWidth) SPR[n + '_' + t] = { img, m: sheets[n] }; left--; onProgress && onProgress(1 - left / names.length); if (!left) res(); };
-      img.src = 'art/' + n + '_' + t + '.webp';
+      const m = sheets[n]; const want = m.fw * m.labels.length, wantH = m.fh * m.dirs;
+      const load = (tries) => {
+        const img = new Image(); img.decoding = 'async';
+        img.onload = img.onerror = () => {
+          const ok = img.naturalWidth === want && img.naturalHeight === wantH;
+          if (!ok && tries < 2) return load(tries + 1);
+          if (ok) SPR[n + '_' + t] = { img, m };
+          left--; onProgress && onProgress(1 - left / names.length); if (!left) res();
+        };
+        img.src = 'art/' + n + '_' + t + '.webp?v=' + (m.v || '1') + (tries ? '&r=' + Date.now() : '');
+      };
+      load(0);
     });
   });
   B.sprite = (n, t) => SPR[n + '_' + t];
