@@ -12,7 +12,7 @@
   function portrait(id) {   // robots: small pictures made by stitch.py; spells: drawn here
     if (PORT[id]) return PORT[id];
     const C = CB.CARDS[id];
-    if (C.type === 'spell' && (id === 'missile' || id === 'emp')) return (PORT[id] = 'art/card_' + id + '.webp?v=2');   // rendered 3D pictures
+    if (CB.PORT_V && id !== 'minidrone') return (PORT[id] = 'art/port_' + id + '.webp?v=' + CB.PORT_V);   // full-card portrait renders (tools/portraits.py)
     if (C.type === 'spell') { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 190; spellArt(cv.getContext('2d'), id); return (PORT[id] = cv.toDataURL()); }
     const sh = (CB.SHEETS || {})[C.sprite];
     return (PORT[id] = 'art/card_' + C.sprite + '.webp?v=' + (sh && sh.v || '1'));
@@ -39,7 +39,7 @@
     const d = h('div', 'card ' + C.rarity + (o.small ? ' small' : '') + (o.tiny ? ' tiny' : '') + (o.locked ? ' locked' : ''));
     d.style.setProperty('--rc', R.color);
     const img = portrait(id);
-    d.innerHTML = `<div class="art" style="background-image:url(${img})"></div><div class="cost">${C.cost}</div>` +
+    d.innerHTML = `<div class="art${/port_/.test(img) ? ' port' : ''}" style="background-image:url(${img})"></div><div class="cost">${C.cost}</div>` +
       (o.tiny ? '' : `<div class="lvl">${o.locked ? '' : 'Lv ' + (lvl || 1)}</div>`);
     if (o.progress) {
       const c = P.s.cards[id]; const need = P.need(id);

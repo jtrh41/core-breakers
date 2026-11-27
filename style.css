@@ -74,6 +74,7 @@ textarea{height:110px;font-size:11px;word-break:break-all}
 .card.legendary{background:linear-gradient(170deg,#1f4560,#121a2e 70%);box-shadow:0 0 0 1px #000,0 0 14px rgba(92,242,255,.35)}
 .card.epic{background:linear-gradient(170deg,#3a2550,#161228 70%)}
 .card .art{position:absolute;inset:6% 4% 14%;background:center bottom/contain no-repeat}
+.card .art.port{inset:0;border-radius:10px;background:center/cover no-repeat}
 .card .cost{position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:14px;
   background:radial-gradient(circle at 35% 30%,#ff9cf3,#c02ab0 60%,#6a0f60);box-shadow:0 0 0 2px #1a0718}
 .card .lvl{position:absolute;left:0;right:0;bottom:2px;text-align:center;font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000}
