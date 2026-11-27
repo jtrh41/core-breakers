@@ -8,6 +8,10 @@
   const SPS = { jet: 0.8, minidrone: 0.9 };   // per-robot fine-tuning of on-screen size
   const FD = 0.09;   // seconds per attack frame (6 frames: wind-up, strike, follow-through)
   const IMPACT = { sentinel: 2, blaster: 1, spider: 2, turret: 1, jet: 1, titan: 3, rocket: 1, hound: 2, rail: 2, arc: 1, bombard: 1, bomber: 2, minidrone: 1, boombot: 2 };   // frame where the hit lands
+  // Each attack has its own colour so different robots never look alike (team shows through the rings and bars).
+  const SIG = { blaster: ['#5dff7a', '#eaffea', '93,255,122'], turret: ['#ffd84a', '#fff6c8', '255,216,74'], minidrone: ['#ff5a6a', '#ffe0e4', '255,90,106'],
+    rail: ['#ff4fd0', '#ffe4f8', '255,79,208'], arc: ['#8fd8ff', '#ffffff', '143,216,255'], hound: ['#fff27a', '#ffffff', '255,242,122'],
+    spider: ['#b86cff', '#f0e0ff', '184,108,255'], sentinel: ['#ffd36a', '#ffffff', '255,211,106'], colossus: ['#ffb43a', '#fff3c8', '255,180,58'] };
   const TCOL = tm => tm ? ['#ff7a2a', '#ffd6a8', '255,122,42'] : ['#38e6ff', '#dafcff', '56,230,255'];
   const DT = 1 / 60;   // simulation steps per second: 60 keeps movement smooth on 60/120 Hz screens
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -110,6 +114,9 @@
         hit: ['triangle', 300, 120, 0.08, 0.05], deploy: ['sine', 300, 700, 0.18, 0.08], zap: ['square', 1400, 200, 0.25, 0.05],
         tower: ['sawtooth', 160, 50, 0.6, 0.12], tick: ['sine', 900, 900, 0.05, 0.04], beam: ['sawtooth', 500, 520, 0.12, 0.02],
         heal: ['sine', 600, 900, 0.2, 0.04], win: ['triangle', 400, 900, 0.7, 0.1], no: ['square', 160, 120, 0.15, 0.05],
+        plasma: ['sine', 620, 160, 0.16, 0.06], tracer: ['square', 1300, 700, 0.035, 0.025], thump: ['sine', 150, 55, 0.25, 0.12], rail: ['sawtooth', 2600, 260, 0.32, 0.05],
+        chain: ['square', 900, 1900, 0.18, 0.035], slash: ['triangle', 760, 180, 0.12, 0.05], chomp: ['square', 230, 80, 0.1, 0.06], venom: ['sine', 380, 950, 0.1, 0.035],
+        freeze: ['sine', 1900, 1300, 0.16, 0.025], whoosh: ['triangle', 300, 900, 0.2, 0.04],
       }[kind]; if (!S) return;
       o.type = S[0]; o.frequency.setValueAtTime(S[1], t); o.frequency.exponentialRampToValueAtTime(Math.max(20, S[2]), t + S[3]);
       g.gain.setValueAtTime(S[4], t); g.gain.exponentialRampToValueAtTime(0.0001, t + S[3]);
@@ -269,6 +276,37 @@
     if (o.scorch !== false) G.scorch.push({ x, y, r: r * 0.95, t: -d, dur: 9 });
     if (o.shake) setTimeout(() => { if (G) G.shake = Math.max(G.shake, o.shake); }, d * 1000);
   }
+  function impactFx(kind, x, y, r, z, p) {
+    const fake = p && p.fake;
+    if (kind === 'plasma') {   // green plasma splat: ring, droplets, a glowing puddle
+      const c = SIG.blaster; G.fx.push({ type: 'ring', x, y, R: 1.3, t: 0, dur: 0.35, col: c[0] }); G.fx.push({ type: 'glow', x, y, z, r: 1.1, t: 0, dur: 0.25, col: c[2] });
+      for (let i = 0; i < 9; i++) { const a = rnd(0, 6.283), v = rnd(1.5, 3.5); G.fx.push({ type: 'spark', x, y, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(2, 4), t: 0, dur: rnd(0.35, 0.6), col: c[0], size: 0.16 }); }
+      G.glows.push({ x, y, r: 0.9, t: 0, dur: 0.6, rgb: c[2] }); B.sfx('plasma');
+    } else if (kind === 'tracer' || kind === 'pulse') {   // bullet ricochet: tiny white-yellow sparks and a puff of dust
+      const c = kind === 'tracer' ? SIG.turret : SIG.minidrone; sparksAt(x, y, z, 6, c[1], 5); G.fx.push({ type: 'muzzle', x, y, z, t: 0, dur: 0.08, rgb: c[2], col: c[1], r: 0.4, star: true, rot: rnd(0, 1) });
+      G.fx.push({ type: 'dust', x, y, vx: rnd(-0.5, 0.5), vy: rnd(-0.5, 0.5), z: z * 0.5, t: 0, dur: 0.4, size: 0.18 });
+    } else if (kind === 'mortar') {   // earth eruption: dirt geyser, rocks, crater (no fireball)
+      G.fx.push({ type: 'flash', x, y, z: 0.2, r: r * 0.7, t: 0, dur: 0.1 }); G.fx.push({ type: 'ring', x, y, R: r * 1.5, t: 0, dur: 0.4, col: '#d8b890' });
+      for (let i = 0; i < 14; i++) { const a = rnd(0, 6.283), v = rnd(0.3, 1.4); G.fx.push({ type: 'dirt', x: x + Math.cos(a) * rnd(0, r * 0.4), y: y + Math.sin(a) * rnd(0, r * 0.3), z: 0.1, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: rnd(3, 7), t: -rnd(0, 0.08), dur: rnd(0.9, 1.4), size: rnd(0.3, 0.6) }); }
+      for (let i = 0; i < 12; i++) G.fx.push({ type: 'debris', x, y, z: 0.2, vx: rnd(-3, 3), vy: rnd(-3, 3), vz: rnd(4, 8), rot: rnd(0, 6), vr: rnd(-12, 12), w: rnd(0.08, 0.18), h: rnd(0.07, 0.14), col: ['#6a5238', '#8a6a48', '#4a3a28'][i % 3], t: 0, dur: 1.3 });
+      G.scorch.push({ x, y, r: r * 0.9, t: 0, dur: 8, crack: true }); if (!fake) G.shake = Math.max(G.shake, 0.2);
+    } else if (kind === 'bomb') {   // heavy bomb: fireball plus a rising mushroom column
+      explode(x, y, r, { debris: fake ? 3 : 10, shake: fake ? 0.08 : 0.22, big: true });
+      for (let i = 0; i < 7; i++) G.fx.push({ type: 'smoke', x: x + rnd(-0.2, 0.2), y: y + rnd(-0.1, 0.1), z: 0.4 + i * 0.35, t: -0.1 - i * 0.05, dur: rnd(1.4, 2.0), size: 0.35 + (i > 4 ? 0.3 : 0), vz: 1.2 });
+    } else if (kind === 'boombot') {   // cartoon shockwave: white flash, double ring, speed lines, BOOM!
+      G.fx.push({ type: 'flash', x, y, z: 0.4, r: r * 1.6, t: 0, dur: 0.14 });
+      G.fx.push({ type: 'ring', x, y, R: r * 2.2, t: 0, dur: 0.32, col: '#ffffff' }); G.fx.push({ type: 'ring', x, y, R: r * 1.6, t: -0.06, dur: 0.4, col: '#ff8a2a' });
+      for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283; G.fx.push({ type: 'spark', x, y, z: 0.4, vx: Math.cos(a) * 9, vy: Math.sin(a) * 9, vz: 0.5, t: 0, dur: 0.22, col: '#fff4d0', size: 0.12 }); }
+      explode(x, y, r * 0.6, { debris: 6, sparks: 4, shake: 0.25 });
+      G.fx.push({ type: 'word', x, y, z: 1.6, t: 0, dur: 0.7, text: 'BOOM!', col: '#ffcf3a' });
+    } else if (kind === 'blast') { explode(x, y, r, { debris: 10, shake: 0.18, big: r > 1.4 });
+    } else if (r > 0) { explode(x, y, r, { z: z * 0.5, debris: fake ? 2 : 5, shake: fake ? 0 : 0.1, sparks: fake ? 5 : null });   // rockets and missiles: classic fireball
+    } else {   // tower shells and other single hits
+      const col = kind === 'tower' || !p ? TCOL(p ? p.team : 0) : ['#ffb347', '#fff0c0', '255,180,80'];
+      if (kind === 'minimissile') { explode(x, y, 0.35, { z, debris: 0, sparks: 5, scorch: false }); return; }
+      sparksAt(x, y, z, kind === 'tower' ? 9 : 6, col[1], 3); G.fx.push({ type: 'glow', x, y, z, r: kind === 'tower' ? 0.8 : 0.5, t: 0, dur: 0.14, col: col[2] });
+    }
+  }
   function towerBlast(e, r) {
     G.hitstop = 0.12;
     explode(e.x, e.y, r, { z: 1.2, debris: 34, big: true, shake: 0.5 });
@@ -296,13 +334,13 @@
     }
     if (c.proj === 'rail') return railShot(u, e, p.amt);
     if (c.proj === 'chain') return chainShot(u, e, p.amt);
-    if (c.proj) { if (e.alive) { shoot(u, e, c.proj, p.amt); B.sfx(c.proj === 'laser' || c.proj === 'minimissile' ? 'laser' : 'shell'); } return; }
+    if (c.proj) { if (e.alive) { shoot(u, e, c.proj, p.amt); B.sfx({ laser: 'laser', minimissile: 'laser', pulse: 'laser', plasma: 'laser', tracer: 'tracer', mortar: 'shell', bomb: 'whoosh' }[c.proj] || 'shell'); } return; }
     if (!e.alive || gap(u, e) > u.range + 0.8) return;
     damage(e, p.amt, u); B.sfx('hit');
     if (G.sim) return;
     const a = Math.atan2(e.y - u.y, e.x - u.x), hx = e.x - Math.cos(a) * e.r * 0.7, hy = e.y - Math.sin(a) * e.r * 0.7, hz = e.air ? 1.8 : e.kind === 'tower' ? 1.2 : 0.7;
     const sp = c.sprite;
-    if (sp === 'sentinel') { G.fx.push({ type: 'slash', x: u.x, y: u.y, a: u.face, r: u.r + 1.05, t: 0, dur: 0.24, col: tc }); sparksAt(hx, hy, hz, 10, tc[1], 4); G.fx.push({ type: 'glow', x: hx, y: hy, z: hz, r: 0.7, t: 0, dur: 0.18, col: tc[2] }); }
+    if (sp === 'sentinel') { const g = SIG.sentinel; G.fx.push({ type: 'slash', x: u.x, y: u.y, a: u.face, r: u.r + 1.05, t: 0, dur: 0.24, col: g }); G.fx.push({ type: 'cross', x: hx, y: hy, z: hz, t: 0, dur: 0.22, col: g }); sparksAt(hx, hy, hz, 10, g[1], 4); G.fx.push({ type: 'glow', x: hx, y: hy, z: hz, r: 0.7, t: 0, dur: 0.18, col: g[2] }); B.sfx('slash'); }
     else if (sp === 'titan') {
       const fx = u.x + Math.cos(u.face) * (u.r + 0.5), fy = u.y + Math.sin(u.face) * (u.r + 0.5);
       G.fx.push({ type: 'ring', x: fx, y: fy, R: 2.6, t: 0, dur: 0.45, col: '#ffe0b0' }); G.fx.push({ type: 'ring', x: fx, y: fy, R: 1.6, t: -0.05, dur: 0.35, col: '#ffffff' });
@@ -311,21 +349,23 @@
       G.scorch.push({ x: fx, y: fy, r: 1.0, t: 0, dur: 5, crack: true }); G.shake = Math.max(G.shake, 0.32); G.hitstop = 0.07; B.sfx('boom');
     }
     else if (sp === 'hound') {
-      G.fx.push({ type: 'zap', x1: u.x + Math.cos(u.face) * u.r, y1: u.y + Math.sin(u.face) * u.r, x2: hx, y2: hy, z: hz, t: 0, dur: 0.22, col: p.charged ? '#fff27a' : tc[0] });
-      sparksAt(hx, hy, hz, p.charged ? 18 : 8, p.charged ? '#fff27a' : tc[1], 5);
+      G.fx.push({ type: 'bite', x: hx, y: hy, z: hz, a: u.face, t: 0, dur: 0.2, col: SIG.hound }); B.sfx('chomp');
+      if (p.charged) G.fx.push({ type: 'zap', x1: u.x + Math.cos(u.face) * u.r, y1: u.y + Math.sin(u.face) * u.r, x2: hx, y2: hy, z: hz, t: 0, dur: 0.22, col: '#fff27a' });
+      sparksAt(hx, hy, hz, p.charged ? 18 : 6, '#fff27a', 5);
       if (p.charged) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: 1.8, t: 0, dur: 0.35, col: '#fff27a' }); G.shake = Math.max(G.shake, 0.18); G.hitstop = 0.06; B.sfx('zap'); }
     }
-    else if (sp === 'spider') { G.fx.push({ type: 'zap', x1: u.x, y1: u.y, x2: hx, y2: hy, z: hz * 0.6, t: 0, dur: 0.14, col: tc[0], thin: true }); sparksAt(hx, hy, hz, 4, tc[1], 2.5); }
+    else if (sp === 'spider') { const g = SIG.spider; sparksAt(hx, hy, hz * 0.7, 3, g[1], 2); if (Math.random() < 0.6) B.sfx('venom');
+      for (let i = 0; i < 4; i++) G.fx.push({ type: 'bubble', x: hx + rnd(-0.3, 0.3), y: hy + rnd(-0.25, 0.25), z: hz * 0.6, t: -i * 0.05, dur: rnd(0.6, 0.9), col: g, size: rnd(0.13, 0.2) }); }
     else sparksAt(hx, hy, hz, 8, tc[1], 3);
   }
   // splash damage at a point (bombs, mortar shells, boom bots)
-  function blast(team, x, y, r, amt, targets, src) {
+  function blast(team, x, y, r, amt, targets, src, kind) {
     for (const o of G.ents) {
       if (!o.alive || o.team === team) continue;
       if (targets === 'ground' && o.air) continue;
       if (Math.hypot(o.x - x, o.y - y) <= r + o.r * 0.5) damage(o, o.kind === 'tower' ? Math.round(amt * 0.8) : amt, src);
     }
-    explode(x, y, r * 0.95, { debris: 10, shake: 0.18, big: r > 1.4 }); B.sfx('boom'); if (!G.sim) G.hitstop = Math.max(G.hitstop || 0, 0.04);
+    if (!G.sim) impactFx(kind || (src && src.c && src.c.kamikaze ? 'boombot' : 'blast'), x, y, r * 0.95, 0.4, null); B.sfx('boom'); if (!G.sim) G.hitstop = Math.max(G.hitstop || 0, 0.04);
   }
   // Rail Lancer: one shot that pierces everything along a straight line
   function railShot(u, e, amt) {
@@ -335,11 +375,11 @@
       if (!o.alive || o.team === u.team || !canHit(u, o)) continue;
       const t = clamp(((o.x - x0) * Math.cos(a) + (o.y - y0) * Math.sin(a)) / L, 0, 1);
       const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
-      if (Math.hypot(o.x - px, o.y - py) <= o.r + 0.35) { damage(o, amt, u); if (!G.sim) sparksAt(o.x, o.y, o.air ? 1.8 : 0.9, 10, TCOL(u.team)[1], 5); }
+      if (Math.hypot(o.x - px, o.y - py) <= o.r + 0.35) { damage(o, amt, u); if (!G.sim) sparksAt(o.x, o.y, o.air ? 1.8 : 0.9, 10, SIG.rail[1], 5); }
     }
-    B.sfx('zap'); if (G.sim) return;
-    G.fx.push({ type: 'rail', x1: x0, y1: y0, x2: x1, y2: y1, z: 1.5, t: 0, dur: 0.38, col: TCOL(u.team) });
-    G.fx.push({ type: 'glow', x: x0, y: y0, z: 1.5, r: 1.0, t: 0, dur: 0.18, col: TCOL(u.team)[2] }); G.shake = Math.max(G.shake, 0.12);
+    B.sfx('rail'); if (G.sim) return;
+    G.fx.push({ type: 'rail', x1: x0, y1: y0, x2: x1, y2: y1, z: 1.5, t: 0, dur: 0.45, col: SIG.rail, helix: true });
+    G.fx.push({ type: 'glow', x: x0, y: y0, z: 1.5, r: 1.0, t: 0, dur: 0.18, col: SIG.rail[2] }); G.shake = Math.max(G.shake, 0.12);
   }
   // Arc Trooper: lightning that jumps from the target to more enemies
   function chainShot(u, e, amt) {
@@ -351,15 +391,30 @@
       for (const o of G.ents) { if (!o.alive || o.team === u.team || hit.includes(o) || !canHit(u, o)) continue; const d = Math.hypot(o.x - cur.x, o.y - cur.y); if (d < nd) { nd = d; nx = o; } }
       if (!nx) break; k *= 0.7; damage(nx, Math.round(amt * k), u); hit.push(nx); cur = nx; pts.push([nx.x, nx.y, nx.air ? 1.8 : 0.9]);
     }
-    B.sfx('zap'); if (G.sim) return;
-    G.fx.push({ type: 'chain', pts, t: 0, dur: 0.32, col: TCOL(u.team) });
+    B.sfx('chain'); if (G.sim) return;
+    G.fx.push({ type: 'chain', pts, t: 0, dur: 0.36, col: SIG.arc, forks: true });
     for (const o of hit) sparksAt(o.x, o.y, o.air ? 1.8 : 0.9, 6, '#ffffff', 3);
+  }
+  let o_fake = false;
+  // extra visual-only shots so each weapon has its own rhythm (they deal no damage)
+  function fakeShot(u, e, kind, ox, oy, delay) {
+    setTimeout(() => { if (!G || !u.alive) return; o_fake = true; const t0 = { x: e.x + ox, y: e.y + oy, air: e.air, kind: e.kind, alive: false };
+      shoot(u, t0, kind, 0); o_fake = false; const p = G.proj[G.proj.length - 1]; p.fake = true; p.tgt = null; if (!p.dur) { p.tx = t0.x; p.ty = t0.y; } }, delay * 1000);
+  }
+  function salvo(u, e, kind, pr) {
+    if (kind === 'rocket') { fakeShot(u, e, 'rocket', rnd(-1, 1), rnd(-0.8, 0.8), 0.12); fakeShot(u, e, 'rocket', rnd(-1, 1), rnd(-0.8, 0.8), 0.24); B.sfx('whoosh'); }
+    else if (kind === 'minimissile') fakeShot(u, e, 'minimissile', rnd(-0.4, 0.4), rnd(-0.4, 0.4), 0.1);
+    else if (kind === 'tracer') { fakeShot(u, e, 'tracer', rnd(-0.15, 0.15), rnd(-0.15, 0.15), 0.07); fakeShot(u, e, 'tracer', rnd(-0.15, 0.15), rnd(-0.15, 0.15), 0.14);
+      for (let i = 0; i < 2; i++) G.fx.push({ type: 'debris', x: u.x, y: u.y, z: 0.9, vx: rnd(-2, 2), vy: rnd(-2, 2), vz: rnd(2, 4), rot: rnd(0, 6), vr: rnd(-20, 20), w: 0.06, h: 0.03, col: '#e8c050', t: 0, dur: 0.7 }); }
+    else if (kind === 'bomb') { const a = u.face; for (const k of [-1, 1]) fakeShot(u, e, 'bomb', Math.cos(a) * 0.95 * k, Math.sin(a) * 0.95 * k, 0.12 + (k + 1) * 0.08); }
+    else if (kind === 'pulse') fakeShot(u, e, 'pulse', 0, 0, 0.08);
+    if (kind === 'mortar') B.sfx('thump');
   }
   function shoot(u, e, kind, amt) {
     const tower = u.kind === 'tower';
-    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? (kind === 'bomb' ? 1.3 : 1.75) : ({ rocket: 2.0, shell: 0.9, laser: 1.0, mortar: 1.6 })[kind] || 1;
+    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? (kind === 'bomb' ? 1.3 : 1.75) : ({ rocket: 2.0, shell: 0.9, laser: 1.0, mortar: 1.6, plasma: 1.0, tracer: 0.95, pulse: 0.6 })[kind] || 1;
     const fwd = tower ? u.r * 0.9 : u.r * US * 0.9 + (kind === 'laser' ? 0.4 : 0.2);
-    const spd = { laser: 17, shell: 12, rocket: 9, tower: 14, minimissile: 11, mortar: 7, bomb: 4 }[kind];
+    const spd = { laser: 17, shell: 12, rocket: 9, tower: 14, minimissile: 11, mortar: 7, bomb: 4, plasma: 13, tracer: 26, pulse: 16 }[kind];
     const x = u.x + Math.cos(u.face) * fwd, y = u.y + Math.sin(u.face) * fwd;
     const pr = { kind, team: u.team, x, y, z: z0, tgt: e, tx: e.x, ty: e.y, spd, dmg: amt, splash: u.c && u.c.splash || 0, src: u, targets: u.targets === 'buildings' ? 'ground' : u.targets, trail: [], age: 0 };
     if (kind === 'mortar' || kind === 'bomb') {   // lobbed / dropped: fixed landing point, flight time
@@ -368,6 +423,14 @@
       if (!G.sim) G.fx.push({ type: 'target', x: e.x, y: e.y, R: pr.splash, t: 0, dur: pr.dur, col: TCOL(u.team)[0] });
     }
     G.proj.push(pr);
+    if (!G.sim && !tower) {
+      const M = { plasma: [SIG.blaster[2], SIG.blaster[0], 0.65, false], tracer: [SIG.turret[2], SIG.turret[1], 0.5, true], pulse: [SIG.minidrone[2], SIG.minidrone[1], 0.35, false],
+        rocket: ['255,170,80', '#fff0c0', 0.7, false], minimissile: ['255,170,80', '#fff0c0', 0.35, false], mortar: ['255,200,120', '#fff0c0', 0.8, true] }[kind];
+      if (M) G.fx.push({ type: 'muzzle', x, y, z: z0, t: 0, dur: kind === 'tracer' ? 0.07 : 0.14, rgb: M[0], col: M[1], r: M[2], star: M[3], rot: rnd(0, 1) });
+      if (kind === 'plasma') G.fx.push({ type: 'ring', x, y, R: 0.7, t: 0, dur: 0.22, col: SIG.blaster[0] });
+      if (kind === 'rocket' || kind === 'mortar') for (let i = 0; i < 3; i++) G.fx.push({ type: 'smoke', x: x - Math.cos(u.face) * 0.4, y: y - Math.sin(u.face) * 0.4, z: z0, t: 0, dur: rnd(0.6, 1.0), size: rnd(0.25, 0.4), vz: 0.4, light: true });
+    }
+    if (!G.sim && !tower && !o_fake) salvo(u, e, kind, pr);
     if (!G.sim) G.fx.push({ type: 'glow', x, y, z: z0, r: kind === 'rocket' ? 0.9 : tower ? 0.8 : 0.55, t: 0, dur: 0.12, col: kind === 'rocket' || kind === 'shell' || tower ? '255,190,90' : TCOL(u.team)[2] });
   }
 
@@ -450,7 +513,8 @@
       damage(e, Math.round((u.c.ramp ? u.c.ramp[st] : u.c.dmg) * CB.LVL_MUL(u.lvl)), u); u.cd = u.hit;
       if (u.c.frost) {   // slow the target and everyone around it
         for (const o of G.ents) if (o.alive && o.team !== u.team && o.kind !== 'tower' && Math.hypot(o.x - e.x, o.y - e.y) <= u.c.frost.r + o.r) { o.slowT = u.c.frost.t; o.slowAmt = u.c.frost.slow; }
-        if (!G.sim) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: u.c.frost.r, t: 0, dur: 0.4, col: '#bff4ff' }); for (let i = 0; i < 4; i++) G.fx.push({ type: 'spark', x: e.x + rnd(-0.8, 0.8), y: e.y + rnd(-0.6, 0.6), z: rnd(0.2, 1.2), vx: 0, vy: 0, vz: -0.5, t: 0, dur: 0.6, col: '#e8fbff', size: 0.07 }); }
+        if (!G.sim) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: u.c.frost.r, t: 0, dur: 0.4, col: '#bff4ff' }); B.sfx('freeze');
+          for (let i = 0; i < 4; i++) G.fx.push({ type: 'debris', x: e.x, y: e.y, z: 0.6, vx: rnd(-2.5, 2.5), vy: rnd(-2.5, 2.5), vz: rnd(2, 5), rot: rnd(0, 6), vr: rnd(-10, 10), w: 0.05, h: 0.16, col: '#d8f6ff', t: 0, dur: 0.8, ice: true }); for (let i = 0; i < 4; i++) G.fx.push({ type: 'spark', x: e.x + rnd(-0.8, 0.8), y: e.y + rnd(-0.6, 0.6), z: rnd(0.2, 1.2), vx: 0, vy: 0, vz: -0.5, t: 0, dur: 0.6, col: '#e8fbff', size: 0.07 }); }
       }
       B.sfx('beam');
       G.fx.push({ type: 'spark', x: e.x, y: e.y, z: e.air ? 1.8 : 0.7, vx: rnd(-2, 2), vy: rnd(-2, 2), vz: rnd(1, 3), t: 0, dur: 0.3, col: '#ffe08a', size: 0.08 + st * 0.03 });
@@ -547,7 +611,9 @@
       p.x = p.sx + (p.tx - p.sx) * k; p.y = p.sy + (p.ty - p.sy) * k;
       p.z = p.kind === 'bomb' ? p.sz * (1 - k * k) : p.sz * (1 - k) + Math.sin(k * Math.PI) * Math.max(2.5, p.dur * 3.5);
       if (!G.sim && p.kind === 'mortar' && Math.random() < 0.6) G.fx.push({ type: 'smoke', x: p.x, y: p.y, z: p.z, t: 0, dur: 0.6, size: 0.18, vz: 0.2, light: true });
-      if (k >= 1) { p.done = true; blast(p.team, p.tx, p.ty, p.splash, p.dmg, p.targets, p.src); }
+      if (k >= 1) { p.done = true;
+        if (p.fake) { if (!G.sim) impactFx(p.kind, p.tx, p.ty, p.splash * 0.7, 0.1, p); }
+        else blast(p.team, p.tx, p.ty, p.splash, p.dmg, p.targets, p.src, p.kind); }
       return;
     }
     if (p.tgt && p.tgt.alive) { p.tx = p.tgt.x; p.ty = p.tgt.y; }
@@ -557,16 +623,17 @@
     const s = p.spd * dt;
     if (d <= s) {
       p.done = true;
+      if (p.fake) { if (!G.sim) impactFx(p.kind, p.tx, p.ty, (p.splash || 0.5) * 0.6, tz, p); return; }
       if (p.splash) {
         for (const e of G.ents) {
           if (!e.alive || e.team === p.team) continue;
           if (p.targets === 'ground' && e.air) continue;
           if (Math.hypot(e.x - p.tx, e.y - p.ty) <= p.splash + e.r * 0.5) damage(e, p.dmg, p.src);
         }
-        explode(p.tx, p.ty, p.splash * 0.9, { z: tz * 0.5, debris: 5, shake: 0.1 }); B.sfx('boom');
+        if (!G.sim) impactFx(p.kind, p.tx, p.ty, p.splash * 0.9, tz, p); B.sfx('boom');
       } else {
         if (p.tgt && p.tgt.alive) damage(p.tgt, p.dmg, p.src);
-        if (!G.sim) { const col = p.kind === 'laser' ? TCOL(p.team) : ['#ffb347', '#fff0c0', '255,180,80']; sparksAt(p.tx, p.ty, tz, p.kind === 'tower' ? 9 : 6, col[1], 3); G.fx.push({ type: 'glow', x: p.tx, y: p.ty, z: tz, r: p.kind === 'tower' ? 0.8 : 0.5, t: 0, dur: 0.14, col: col[2] }); }
+        if (!G.sim) impactFx(p.kind, p.tx, p.ty, 0, tz, p);
       }
       return;
     }
@@ -943,7 +1010,7 @@
     const alpha = e.deploy > 0 ? 1 - e.deploy * 0.7 : 1;
     if (!B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), alpha)) fallback(c, e, x, y);
     if (e.flash > 0) { c.save(); c.globalCompositeOperation = 'lighter'; B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), Math.min(0.6, e.flash * 5)); c.restore(); }   // hit flash: the robot itself brightens
-    if (e.slowT > 0) { c.save(); c.globalCompositeOperation = 'lighter'; glow(c, x, y - T * e.r * US, T * e.r * US * 1.6, '150,230,255', 0.35); c.restore();
+    if (e.slowT > 0) { c.save(); c.globalCompositeOperation = 'lighter'; glow(c, x, y - T * e.r * US, T * e.r * US * 1.1, '120,210,255', 0.22); c.restore();
       if (Math.random() < 0.15) G.fx.push({ type: 'spark', x: e.x + rnd(-0.4, 0.4), y: e.y + rnd(-0.3, 0.3), z: rnd(0.3, 1.4), vx: 0, vy: 0, vz: -0.4, t: 0, dur: 0.5, col: '#e8fbff', size: 0.05 }); }
     if (e.stun > 0) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = '#aef'; c.lineWidth = 2;
       for (let k = 0; k < 4; k++) { let px = x + rnd(-0.5, 0.5) * T, py = y - rnd(0.3, 1.3) * T * US; c.beginPath(); c.moveTo(px, py); for (let j = 0; j < 3; j++) { px += rnd(-8, 8); py += rnd(-8, 8); c.lineTo(px, py); } c.stroke(); } c.restore(); }
@@ -964,7 +1031,7 @@
   // Colossus beam: wavy, layered, thicker and hotter the longer it holds one target.
   function drawBeam(c, u, e) {
     const st = u.c.ramp ? (u.beamT < 2 ? 0 : u.beamT < 4 ? 1 : 2) : 1;
-    const tc = u.c.frost ? ['#7fe6ff', '#e8fbff', '127,230,255'] : TCOL(u.team); const hot = u.c.frost ? '230,250,255' : ['255,255,255', '255,240,190', '255,250,230'][st];
+    const tc = u.c.frost ? ['#7fe6ff', '#e8fbff', '127,230,255'] : SIG.colossus; const hot = u.c.frost ? '230,250,255' : ['255,255,255', '255,240,190', '255,250,230'][st];
     const reach = u.c.frost ? 1.2 : 1.6, oz = u.c.frost ? 1.3 : 2.0;
     const ox = u.x + Math.cos(u.face) * reach, oy = u.y + Math.sin(u.face) * reach;
     const x0 = sx(ox), y0 = sy(oy, oz), x1 = sx(e.x), y1 = sy(e.y, e.air ? 1.8 : e.kind === 'tower' ? 1.5 : 0.7);
@@ -974,7 +1041,8 @@
     c.strokeStyle = tc[0]; c.globalAlpha = 0.35; c.lineWidth = w * 3.2; path(w * 0.5, 0);
     c.globalAlpha = 0.8; c.lineWidth = w * 1.4; path(w * 0.8, 1.3);
     c.strokeStyle = `rgb(${hot})`; c.globalAlpha = 1; c.lineWidth = w * 0.45; path(w * 0.3, 2.1);
-    glow(c, x0, y0, w * 4, tc[2], 0.9); glow(c, x1, y1, w * (5 + st * 2), hot, 0.9); glow(c, x1, y1, w * 9, tc[2], 0.5);
+    if (u.c.frost) { glow(c, x0, y0, w * 3, tc[2], 0.7); glow(c, x1, y1, w * 2.5, hot, 0.6); glow(c, x1, y1, w * 4.5, tc[2], 0.35); }
+    else { glow(c, x0, y0, w * 4, tc[2], 0.9); glow(c, x1, y1, w * (5 + st * 2), hot, 0.9); glow(c, x1, y1, w * 9, tc[2], 0.5); }
     c.restore();
     if (Math.random() < 0.5 + st * 0.2) G.fx.push({ type: 'spark', x: e.x, y: e.y, z: e.air ? 1.8 : 0.8, vx: rnd(-3, 3), vy: rnd(-3, 3), vz: rnd(1, 4), t: 0, dur: 0.3, col: st === 2 ? '#fff6c0' : tc[1], size: 0.06 + st * 0.02 });
   }
@@ -1002,7 +1070,17 @@
     p.trail.push([p.x, p.y, p.z]); if (p.trail.length > 7) p.trail.shift();
     const t0 = p.trail[0];
     c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-    if (p.kind === 'laser') {
+    if (p.kind === 'plasma') {   // fat green plasma bolt with a bright core and a wobbling halo
+      const g = SIG.blaster, dx = X - sx(t0[0]), dy = Y - sy(t0[1], t0[2]); const L = Math.hypot(dx, dy) || 1; const ux = dx / L, uy = dy / L;
+      c.strokeStyle = g[0]; c.globalAlpha = 0.55; c.lineWidth = T * 0.62; c.beginPath(); c.moveTo(X - ux * T * 0.8, Y - uy * T * 0.8); c.lineTo(X, Y); c.stroke();
+      c.strokeStyle = g[1]; c.globalAlpha = 1; c.lineWidth = T * 0.24; c.stroke();
+      glow(c, X, Y, T * (0.95 + 0.15 * Math.sin(G.t * 40)), g[2], 1);
+    } else if (p.kind === 'tracer' || p.kind === 'pulse') {   // long thin bullet streak
+      const g = p.kind === 'tracer' ? SIG.turret : SIG.minidrone, dx = X - sx(t0[0]), dy = Y - sy(t0[1], t0[2]); const L = Math.hypot(dx, dy) || 1; const ux = dx / L, uy = dy / L;
+      const len = T * (p.kind === 'tracer' ? 1.4 : 0.55);
+      glow(c, X, Y, T * 0.3, g[2], 0.9); c.strokeStyle = g[0]; c.globalAlpha = 0.7; c.lineWidth = T * 0.15; c.beginPath(); c.moveTo(X - ux * len, Y - uy * len); c.lineTo(X, Y); c.stroke();
+      c.strokeStyle = g[1]; c.globalAlpha = 1; c.lineWidth = T * 0.065; c.stroke();
+    } else if (p.kind === 'laser') {
       c.strokeStyle = tc[0]; c.globalAlpha = 0.45; c.lineWidth = T * 0.32; c.beginPath(); c.moveTo(sx(t0[0]), sy(t0[1], t0[2])); c.lineTo(X, Y); c.stroke();
       c.strokeStyle = tc[1]; c.globalAlpha = 1; c.lineWidth = T * 0.1; c.stroke();
       glow(c, X, Y, T * 0.55, tc[2], 0.9);
@@ -1086,7 +1164,8 @@
         if (f.z < 0) { f.z = 0; f.vz = -f.vz * 0.35; f.vx *= 0.6; f.vy *= 0.6; f.vr *= 0.5; }
         c.globalCompositeOperation = 'source-over'; c.globalAlpha = Math.min(1, (1 - k) * 3); c.fillStyle = f.col;
         c.save(); c.translate(sx(f.x), sy(f.y, f.z)); c.rotate(f.rot); c.fillRect(-f.w * T / 2, -f.h * T / 2, f.w * T, f.h * T); c.restore();
-        if (k < 0.4) { c.globalCompositeOperation = 'lighter'; glow(c, sx(f.x), sy(f.y, f.z), f.w * T * 1.2, '255,140,40', (0.4 - k) * 2); }
+        if (f.ice) { c.globalCompositeOperation = 'lighter'; glow(c, sx(f.x), sy(f.y, f.z), T * 0.25, '160,235,255', (1 - k) * 0.8); }
+        else if (k < 0.4) { c.globalCompositeOperation = 'lighter'; glow(c, sx(f.x), sy(f.y, f.z), f.w * T * 1.2, '255,140,40', (0.4 - k) * 2); }
       } else if (f.type === 'slash') {
         // a bright crescent sweeping across the swing
         const sweep = Math.min(1, k * 2.2); const a0 = f.a - 1.4, a1 = a0 + 2.8 * sweep;
@@ -1109,6 +1188,8 @@
         c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
         for (const [w, al, col] of [[T * 0.9 * (1 - k * 0.5), 0.3, f.col[0]], [T * 0.38, 0.8, f.col[0]], [T * 0.12, 1, '#ffffff']]) { c.strokeStyle = col; c.globalAlpha = al * a; c.lineWidth = w; c.beginPath(); c.moveTo(X1, Y1); c.lineTo(X2, Y2); c.stroke(); }
         for (let i = 0; i < 5; i++) { const q = (i + 0.5) / 5; glow(c, X1 + (X2 - X1) * q, Y1 + (Y2 - Y1) * q, T * 0.5 * (1 - k), f.col[2], a * 0.7); }
+        if (f.helix) { const L = Math.hypot(X2 - X1, Y2 - Y1) || 1, nx = -(Y2 - Y1) / L, ny = (X2 - X1) / L; c.strokeStyle = '#ffffff'; c.globalAlpha = a; c.lineWidth = Math.max(1.5, T * 0.06);
+          for (const ph of [0, Math.PI]) { c.beginPath(); for (let i = 0; i <= 60; i++) { const q = i / 60, w = Math.sin(q * 26 + ph - k * 20) * T * 0.32 * (1 - k * 0.5); c.lineTo(X1 + (X2 - X1) * q + nx * w, Y1 + (Y2 - Y1) * q + ny * w); } c.stroke(); } }
       } else if (f.type === 'chain') {   // chain lightning between hits
         c.globalCompositeOperation = 'lighter'; c.lineCap = 'round'; c.lineJoin = 'round';
         for (const [w, al, col] of [[7, 0.35, f.col[0]], [3, 0.9, f.col[0]], [1.4, 1, '#ffffff']]) {
@@ -1117,15 +1198,41 @@
           c.stroke();
         }
         for (const q of f.pts) glow(c, sx(q[0]), sy(q[1], q[2]), T * 0.55, f.col[2], 1 - k);
+        if (f.forks) { c.strokeStyle = f.col[0]; c.lineWidth = 1.5; c.globalAlpha = 1 - k;
+          for (let i = 0; i < f.pts.length - 1; i++) for (let j = 0; j < 3; j++) { const A = f.pts[i], Bp = f.pts[i + 1], q = rnd(0.2, 0.8); let px = sx(A[0] + (Bp[0] - A[0]) * q), py = sy(A[1] + (Bp[1] - A[1]) * q, A[2] + (Bp[2] - A[2]) * q);
+            c.beginPath(); c.moveTo(px, py); for (let m = 0; m < 3; m++) { px += rnd(-12, 12); py += rnd(-12, 12); c.lineTo(px, py); } c.stroke(); } }
       } else if (f.type === 'flamep') {   // flamethrower particle: yellow, orange, then smoky red
         f.x += f.vx * dt; f.y += f.vy * dt; f.z += 0.6 * dt; f.vx *= 0.97; f.vy *= 0.97;
         c.globalCompositeOperation = 'lighter';
         glow(c, sx(f.x), sy(f.y, f.z), T * f.size * (0.7 + k * 1.6), k < 0.35 ? '255,230,140' : k < 0.7 ? '255,140,40' : '200,60,20', (1 - k) * 0.9);
+      } else if (f.type === 'cross') {   // X-shaped sword spark
+        c.globalCompositeOperation = 'lighter'; c.lineCap = 'round'; const X = sx(f.x), Y = sy(f.y, f.z), L = T * 1.3 * (0.5 + k);
+        for (const [w, col, al] of [[T * 0.22, f.col[0], 0.5], [T * 0.08, '#ffffff', 1]]) { c.strokeStyle = col; c.globalAlpha = al * (1 - k); c.lineWidth = w * (1 - k * 0.5);
+          c.beginPath(); c.moveTo(X - L, Y - L * 0.6); c.lineTo(X + L, Y + L * 0.6); c.moveTo(X - L, Y + L * 0.6); c.lineTo(X + L, Y - L * 0.6); c.stroke(); }
+      } else if (f.type === 'bite') {   // two jaws snapping shut
+        c.globalCompositeOperation = 'lighter'; c.lineCap = 'round'; const X = sx(f.x), Y = sy(f.y, f.z), R_ = T * 0.85, close = Math.min(1, k * 3);
+        c.strokeStyle = f.col[0]; c.globalAlpha = 1 - k; c.lineWidth = T * 0.18;
+        for (const sd of [-1, 1]) { const oy = sd * R_ * 0.7 * (1 - close); c.beginPath(); c.arc(X, Y + oy, R_, sd < 0 ? Math.PI * 1.15 : Math.PI * 0.15, sd < 0 ? Math.PI * 1.85 : Math.PI * 0.85); c.stroke(); }
+        glow(c, X, Y, T * 0.5, f.col[2], (1 - k) * 0.8);
+      } else if (f.type === 'bubble') {   // venom bubbles rising and popping
+        f.z += 0.9 * dt; const X = sx(f.x + Math.sin(f.t * 12 + f.x) * 0.05), Y = sy(f.y, f.z), rr = T * f.size * (1 + k * 0.6);
+        c.globalCompositeOperation = 'source-over'; c.globalAlpha = 0.85 * (1 - k * k); c.fillStyle = f.col[0]; c.beginPath(); c.arc(X, Y, rr, 0, 7); c.fill();
+        c.fillStyle = f.col[1]; c.beginPath(); c.arc(X - rr * 0.3, Y - rr * 0.3, rr * 0.3, 0, 7); c.fill();
+      } else if (f.type === 'dirt') {   // clods of earth thrown up by a mortar
+        f.x += f.vx * dt; f.y += f.vy * dt; f.z = Math.max(0, f.z + f.vz * dt); f.vz -= 9 * dt;
+        c.globalCompositeOperation = 'source-over'; c.globalAlpha = 0.8 * (1 - k); const rad = f.size * T * (0.6 + k * 0.8);
+        c.drawImage(puffImg('#8a6a48', '#4a3a28'), sx(f.x) - rad, sy(f.y, f.z) - rad, rad * 2, rad * 2);
+      } else if (f.type === 'word') {   // cartoon impact word
+        const X = sx(f.x), Y = sy(f.y, f.z + k * 0.6), sc_ = k < 0.15 ? k / 0.15 * 1.3 : 1.3 - Math.min(0.3, (k - 0.15) * 2);
+        c.globalCompositeOperation = 'source-over'; c.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1; c.font = `900 ${T * 0.85 * sc_}px system-ui`; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.lineWidth = T * 0.16; c.strokeStyle = '#2a1206'; c.strokeText(f.text, X, Y); c.fillStyle = f.col; c.fillText(f.text, X, Y); c.textBaseline = 'alphabetic';
       } else if (f.type === 'target') {   // where a shell or bomb will land
         c.globalCompositeOperation = 'source-over'; c.strokeStyle = f.col; c.globalAlpha = 0.35 + 0.35 * Math.sin(k * 20); c.lineWidth = 2; c.setLineDash([5, 4]);
         c.beginPath(); c.ellipse(sx(f.x), sy(f.y), f.R * T, f.R * T * CB.SIN, 0, 0, 7); c.stroke(); c.setLineDash([]);
       } else if (f.type === 'muzzle') {
-        c.globalCompositeOperation = 'lighter'; glow(c, sx(f.x), sy(f.y, f.z), T * 0.5, '255,220,150', 1 - k);
+        const X = sx(f.x), Y = sy(f.y, f.z), rr = T * (f.r || 0.5); c.globalCompositeOperation = 'lighter'; glow(c, X, Y, rr * 1.4, f.rgb || '255,220,150', 1 - k);
+        if (f.star) { c.strokeStyle = f.col || '#fff2c0'; c.globalAlpha = 1 - k; c.lineWidth = Math.max(2, T * 0.07); c.lineCap = 'round';
+          for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4 + f.rot; c.beginPath(); c.moveTo(X - Math.cos(a) * rr * (1.2 - k), Y - Math.sin(a) * rr * (1.2 - k)); c.lineTo(X + Math.cos(a) * rr * (1.2 - k), Y + Math.sin(a) * rr * (1.2 - k)); c.stroke(); } }
       } else if (f.type === 'emp') {
         c.globalCompositeOperation = 'lighter';
         for (let r = 0; r < 3; r++) { const kk = clamp(k * 1.3 - r * 0.15, 0, 1); c.globalAlpha = (1 - kk) * 0.9; c.strokeStyle = '#8ff6ff'; c.lineWidth = 3;

@@ -30,13 +30,13 @@ CB.CARDS = {
     hp: 800, dmg: 95, hit: 1.2, range: 0.8, sight: 5.5, speed: 1.0, targets: 'ground', radius: 0.45, mass: 6, count: 1, arena: 0 },
   blaster: { name: 'Blaster Bots', rarity: 'common', cost: 3, type: 'troop', sprite: 'blaster',
     desc: 'Two rifle troopers. Shoot ground and air from range.',
-    hp: 260, dmg: 72, hit: 1.1, range: 5, sight: 6, speed: 1.0, targets: 'both', radius: 0.4, mass: 4, count: 2, arena: 0, proj: 'laser' },
+    hp: 260, dmg: 72, hit: 1.1, range: 5, sight: 6, speed: 1.0, targets: 'both', radius: 0.4, mass: 4, count: 2, arena: 0, proj: 'plasma' },
   spider: { name: 'Spider Swarm', rarity: 'common', cost: 2, type: 'troop', sprite: 'spider',
     desc: 'Six fast spider drones. Shred big robots, but splash wipes them out.',
     hp: 72, dmg: 38, hit: 1.0, range: 0.4, sight: 5.5, speed: 1.55, targets: 'ground', radius: 0.3, mass: 1, count: 6, arena: 0 },
   turret: { name: 'Turret', rarity: 'common', cost: 3, type: 'building', sprite: 'turret',
     desc: 'Twin cannon that pulls in tower-attackers. Hits ground only. Wears down over 30 s.',
-    hp: 660, dmg: 82, hit: 0.85, range: 5.5, sight: 5.5, speed: 0, targets: 'ground', radius: 0.8, mass: 99, count: 1, arena: 0, life: 30, proj: 'shell' },
+    hp: 660, dmg: 82, hit: 0.85, range: 5.5, sight: 5.5, speed: 0, targets: 'ground', radius: 0.8, mass: 99, count: 1, arena: 0, life: 30, proj: 'tracer' },
   jet: { name: 'Strike Jets', rarity: 'common', cost: 3, type: 'troop', sprite: 'jet', air: true,
     desc: 'Three flying fighters. Ground melee robots cannot touch them.',
     hp: 170, dmg: 58, hit: 1.0, range: 2.5, sight: 5.5, speed: 1.5, targets: 'both', radius: 0.45, mass: 2, count: 3, arena: 0, proj: 'minimissile' },
@@ -87,7 +87,7 @@ CB.CARDS = {
     hp: 1400, dmg: 360, splash: 1.5, hit: 2.4, range: 0.4, sight: 7, speed: 0.85, targets: 'buildings', radius: 0.75, mass: 10, count: 1, arena: 3, proj: 'bomb' },
   minidrone: { name: 'Mini Drone', rarity: 'common', cost: 0, type: 'troop', sprite: 'minidrone', air: true, token: true,
     desc: 'Launched by the Drone Hive.',
-    hp: 95, dmg: 34, hit: 0.9, range: 1.8, sight: 5.5, speed: 1.6, targets: 'both', radius: 0.3, mass: 1, count: 1, arena: 9, proj: 'laser' },
+    hp: 95, dmg: 34, hit: 0.9, range: 1.8, sight: 5.5, speed: 1.6, targets: 'both', radius: 0.3, mass: 1, count: 1, arena: 9, proj: 'pulse' },
 };
 CB.CARD_ORDER = ['sentinel', 'blaster', 'spider', 'turret', 'jet', 'emp', 'boombot', 'arc', 'titan', 'missile', 'medic', 'rocket', 'bombard', 'hive', 'cryo', 'rail', 'hound', 'scorcher', 'bomber', 'colossus'];
 CB.START_DECK = ['sentinel', 'blaster', 'spider', 'turret', 'jet', 'emp', 'titan', 'missile'];
