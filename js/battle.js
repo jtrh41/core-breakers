@@ -8,7 +8,7 @@
   const FD = 0.09;   // seconds per attack frame (6 frames: wind-up, strike, follow-through)
   const IMPACT = { sentinel: 2, blaster: 1, spider: 2, turret: 1, jet: 1, titan: 3, rocket: 1, hound: 2 };   // frame where the hit lands
   const TCOL = tm => tm ? ['#ff7a2a', '#ffd6a8', '255,122,42'] : ['#38e6ff', '#dafcff', '56,230,255'];
-  const DT = 1 / 30;
+  const DT = 1 / 60;   // simulation steps per second: 60 keeps movement smooth on 60/120 Hz screens
   const rnd = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -17,24 +17,40 @@
   const SPR = {};
   // Each sheet is requested with its content version (?v=), so an old offline copy can never be paired with new frame data.
   // If an image still arrives with the wrong size, it is fetched again past every cache.
-  B.loadSprites = (onProgress) => new Promise(res => {
-    const sheets = CB.SHEETS || {}; const names = [];
-    for (const n in sheets) for (const t of TEAM) names.push([n, t]);
+  // Loads the given sheets (both teams) and frees the rest, so only the robots in this battle sit in memory.
+  // Each sheet is requested with its content version (?v=), so an old offline copy can never be paired with new frame data;
+  // an image that still arrives with the wrong size is fetched again past every cache.
+  B.loadSprites = (wantNames, onProgress) => new Promise(res => {
+    // wantNames: 'sheet' (both teams) or 'sheet_blue' / 'sheet_red'
+    const sheets = CB.SHEETS || {}; const want = new Set();
+    for (const w of (wantNames || Object.keys(sheets))) { if (/_(blue|red)$/.test(w)) want.add(w); else for (const t of TEAM) want.add(w + '_' + t); }
+    for (const k in SPR) { const n = k.slice(0, k.lastIndexOf('_')); if (!want.has(k) || SPR[k].m.v !== (sheets[n] || {}).v) { SPR[k].img.src = ''; delete SPR[k]; } }
+    const names = [];
+    for (const w of want) { const i = w.lastIndexOf('_'), n = w.slice(0, i), t = w.slice(i + 1); if (sheets[n] && !SPR[w]) names.push([n, t]); }
     let left = names.length; if (!left) return res();
+    const total = names.length;
     names.forEach(([n, t]) => {
-      const m = sheets[n]; const want = m.fw * m.labels.length, wantH = m.fh * m.dirs;
+      const m = sheets[n]; const wantW = m.fw * m.labels.length, wantH = m.fh * m.dirs;
       const load = (tries) => {
         const img = new Image(); img.decoding = 'async';
         img.onload = img.onerror = () => {
-          const ok = img.naturalWidth === want && img.naturalHeight === wantH;
+          const ok = img.naturalWidth === wantW && img.naturalHeight === wantH;
           if (!ok && tries < 2) return load(tries + 1);
-          if (ok) SPR[n + '_' + t] = { img, m };
-          left--; onProgress && onProgress(1 - left / names.length); if (!left) res();
+          const done = () => { left--; onProgress && onProgress(1 - left / total); if (!left) res(); };
+          if (ok) { SPR[n + '_' + t] = { img, m }; (img.decode ? img.decode() : Promise.resolve()).then(done, done); } else done();
         };
         img.src = 'art/' + n + '_' + t + '.webp?v=' + (m.v || '1') + (tries ? '&r=' + Date.now() : '');
       };
       load(0);
     });
+  });
+  const ARENA_IMG = {};
+  B.loadArena = (i) => new Promise(res => {
+    if (!CB.ARENA_META) return res();
+    if (ARENA_IMG[i] && ARENA_IMG[i].naturalWidth) return res();
+    for (const k in ARENA_IMG) if (+k !== i) delete ARENA_IMG[k];   // keep one big arena image in memory at a time
+    const im = new Image(); im.onload = () => (im.decode ? im.decode() : Promise.resolve()).then(res, res); im.onerror = res;
+    im.src = 'art/arena_' + i + '.webp?v=' + (CB.ARENA_V || '1'); ARENA_IMG[i] = im;
   });
   B.sprite = (n, t) => SPR[n + '_' + t];
   // octant (0=E,1=SE,2=S,...) -> [render direction, mirrored]
@@ -47,7 +63,8 @@
     const fw = m.fw, fh = m.fh, k = scale / m.ppm;
     ctx.save(); ctx.translate(x, y); if (mir) ctx.scale(-1, 1);
     if (alpha != null) ctx.globalAlpha = alpha;
-    ctx.drawImage(s.img, li * fw, d * fh, fw, fh, -fw / 2 * k, -m.anchor * fh * k, fw * k, fh * k);
+    const ax = m.ax != null ? m.ax : fw / 2, ay = m.ay != null ? m.ay : m.anchor * fh;
+    ctx.drawImage(s.img, li * fw, d * fh, fw, fh, -ax * k, -ay * k, fw * k, fh * k);
     ctx.restore(); return true;
   };
 
@@ -592,7 +609,7 @@
     }
     let res = null; opt.onEnd = r => { res = r; };
     let n = 0;
-    while (!G.over && n < 30 * 400) { step(DT); G.fx.length = 0; n++; }
+    while (!G.over && n < 60 * 300) { step(DT); G.fx.length = 0; n++; }
     const out = { crowns: G.crowns.slice(), t: G.t, played: G.played };
     G = null; return out;
   };
@@ -631,7 +648,7 @@
   B.layout = () => { if (G) { layout(); buildBg(); } };
 
   function buildBg() {
-    const A = CB.ARENAS[G.arena]; const img = B.arenaImg && B.arenaImg[G.arena];
+    const A = CB.ARENAS[G.arena]; const img = ARENA_IMG[G.arena];
     bg = document.createElement('canvas'); bg.width = Math.round(VW * DPR); bg.height = Math.round(VH * DPR);
     const g = bg.getContext('2d'); g.scale(DPR, DPR);
     g.fillStyle = '#0d1016'; g.fillRect(0, 0, VW, VH);
@@ -745,12 +762,12 @@
     }
     const sp = e.c.sprite; const team = TEAM[e.team];
     const af = Math.floor(e.atkT / FD);
-    let lab = 'i0';
+    let lab = 'i' + (Math.floor(G.t * 3.2 + e.id * 0.37) % 4);
     if (e.c.beam && e.anim === 'attack' && e.locked) lab = 'a' + (1 + Math.floor(G.t * 11) % 5);
     else if (e.kind === 'building') lab = af < 6 ? 'a' + af : 'i0';
     else if (af < 6 && (e.pend || e.anim === 'attack')) lab = 'a' + af;
-    else if (e.air) lab = 'w' + (Math.floor(e.walkPh * 6 + G.t * 6) % 6);
-    else if (e.anim === 'walk') lab = 'w' + (Math.floor(e.walkPh * 6) % 6);
+    else if (e.air) lab = 'w' + (Math.floor(e.walkPh * 8 + G.t * 7) % 8);
+    else if (e.anim === 'walk') lab = 'w' + (Math.floor(e.walkPh * 8) % 8);
     if (e.air && e.anim !== 'walk') e.walkPh += 0.01;
     const alpha = e.deploy > 0 ? 1 - e.deploy * 0.7 : 1;
     if (!B.drawSprite(c, sp, team, lab, e.face, x, y, T * US, alpha)) fallback(c, e, x, y);

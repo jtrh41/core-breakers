@@ -9,22 +9,12 @@
 
   // ---------- card portraits (cropped from the rendered sheets) ----------
   const PORT = {};
-  function portrait(id) {
+  function portrait(id) {   // robots: small pictures made by stitch.py; spells: drawn here
     if (PORT[id]) return PORT[id];
-    const C = CB.CARDS[id]; const cv = document.createElement('canvas'); cv.width = 160; cv.height = 190; const g = cv.getContext('2d');
-    if (C.type === 'spell') { spellArt(g, id); return (PORT[id] = cv.toDataURL()); }
-    const s = CB.B.sprite(C.sprite, 'blue'); if (!s) return '';
-    const m = s.m, fw = m.fw, fh = m.fh; const li = m.labels.indexOf(C.air ? 'w1' : 'i0');
-    const t = document.createElement('canvas'); t.width = fw; t.height = fh; const tg = t.getContext('2d');
-    tg.drawImage(s.img, li * fw, 1 * fh, fw, fh, 0, 0, fw, fh);
-    const d = tg.getImageData(0, 0, fw, fh).data; let x0 = fw, y0 = fh, x1 = 0, y1 = 0;
-    for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) if (d[(y * fw + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    if (x1 <= x0) return '';
-    const bw = x1 - x0, bh = y1 - y0; const k = Math.min(150 / bw, 176 / bh) * (C.count > 1 ? 0.78 : 1);
-    const draw = (ox, oy, kk) => g.drawImage(t, x0, y0, bw, bh, 80 - bw * kk / 2 + ox, 186 - bh * kk + oy, bw * kk, bh * kk);
-    if (C.count > 1) { draw(-34, -40, k * 0.72); draw(34, -40, k * 0.72); }
-    draw(0, 0, k);
-    return (PORT[id] = cv.toDataURL());
+    const C = CB.CARDS[id];
+    if (C.type === 'spell') { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 190; spellArt(cv.getContext('2d'), id); return (PORT[id] = cv.toDataURL()); }
+    const sh = (CB.SHEETS || {})[C.sprite];
+    return (PORT[id] = 'art/card_' + C.sprite + '.webp?v=' + (sh && sh.v || '1'));
   }
   function spellArt(g, id) {
     g.save(); g.translate(80, 100);
@@ -257,11 +247,15 @@
     const name = NAMES[Math.floor(Math.random() * NAMES.length)];
     $('bThem').textContent = name; $('bMe').textContent = s.name;
     UI.show('battle');
-    CB.B.start({
+    const need = new Set(['guard', 'king', 'guardx', 'kingx']);
+    for (const id of s.deck) if (CB.CARDS[id].sprite) need.add(CB.CARDS[id].sprite + '_blue');
+    for (const id of pick) if (CB.CARDS[id].sprite) need.add(CB.CARDS[id].sprite + '_red');
+    const ld = $('loading'); ld.classList.remove('gone'); ld.querySelector('p').textContent = 'Deploying robots…'; $('lfill').style.width = '0%';
+    Promise.all([CB.B.loadSprites([...need], p => $('lfill').style.width = Math.round(p * 100) + '%'), CB.B.loadArena(a)]).then(() => { ld.classList.add('gone'); }).then(() => CB.B.start({
       deck: s.deck.slice(), levels: myLv, cmd: s.cmd, arena: a,
       enemy: { deck: [...pick], levels: aiLv, cmd: Math.max(1, s.cmd + (Math.random() < 0.3 ? -1 : 0)), skill: Math.min(1, 0.35 + a * 0.15 + inArena * 0.1), emul: s.trophies < 150 ? 0.8 : s.trophies < 300 ? 0.9 : 1 },
       onEnd: res => { CB.B.stop(); results(res, name); },
-    });
+    }));
   };
   function results(res, name) {
     const r = P.result(res.me, res.them);

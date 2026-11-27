@@ -71,11 +71,11 @@ CB.TOWERS = {
 };
 
 CB.ARENAS = [
-  { name: 'Moon Base',     trophies: 0,    floor: '#2b3340', glow: '#36d6ff', tint: '#4a5a72', gold: 15 },
-  { name: 'Scrapyard',     trophies: 300,  floor: '#3a3128', glow: '#ffb03a', tint: '#6a5640', gold: 20 },
-  { name: 'Cryo Station',  trophies: 700,  floor: '#26394a', glow: '#8ff0ff', tint: '#5a7d96', gold: 25 },
-  { name: 'Neon City',     trophies: 1200, floor: '#2a2440', glow: '#ff4fd8', tint: '#5a4a80', gold: 30 },
-  { name: 'Core Reactor',  trophies: 1800, floor: '#3a2224', glow: '#ff5a3a', tint: '#7a3a3a', gold: 40 },
+  { name: 'Green Fields',  trophies: 0,    floor: '#4f8a2c', glow: '#7fd0ff', tint: '#6a8a4a', gold: 15 },
+  { name: 'Desert Canyon', trophies: 300,  floor: '#d9b26b', glow: '#5fe0d0', tint: '#b8955f', gold: 20 },
+  { name: 'Frozen Peaks',  trophies: 700,  floor: '#c9d6e4', glow: '#9ff0ff', tint: '#8fa2b8', gold: 25 },
+  { name: 'Neon City',     trophies: 1200, floor: '#3a3d46', glow: '#ff4fd8', tint: '#5a4a80', gold: 30 },
+  { name: 'Volcano Core',  trophies: 1800, floor: '#2b2523', glow: '#ff6a2a', tint: '#7a3a3a', gold: 40 },
 ];
 CB.arenaOf = t => { let a = 0; CB.ARENAS.forEach((x, i) => { if (t >= x.trophies) a = i; }); return a; };
 
