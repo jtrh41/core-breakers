@@ -4,7 +4,7 @@
   const B = CB.B = {};
   const W = CB.W, H = CB.H, R0 = CB.RIVER[0], R1 = CB.RIVER[1], MIDY = (R0 + R1) / 2;
   const TEAM = ['blue', 'red'];
-  const US = 1.45;   // robots are drawn larger than their footprint so they read well on a phone
+  const US = 1.55;   // robots are drawn larger than their footprint so they read well on a phone
   const SPS = { jet: 0.8, minidrone: 0.9 };   // per-robot fine-tuning of on-screen size
   const FD = 0.09;   // seconds per attack frame (6 frames: wind-up, strike, follow-through)
   const IMPACT = { sentinel: 2, blaster: 1, spider: 2, turret: 1, jet: 1, titan: 3, rocket: 1, hound: 2, rail: 2, arc: 1, bombard: 1, bomber: 2, minidrone: 1, boombot: 2 };   // frame where the hit lands
@@ -69,6 +69,33 @@
     ctx.restore(); return true;
   };
 
+  // Cast shadow shaped like the robot: the frame is drawn small into a scratch canvas (soft for free), turned black,
+  // then flattened and slanted onto the floor away from the sun. Flyers' shadows sit on the ground, offset and fainter.
+  // Silhouettes are cached per frame (small, so they stay soft and cheap); at most ~700 kept.
+  const SHCACHE = new Map();
+  function shadowOf(s, name, li, d, mir) {
+    const key = name + li + '_' + d + (mir ? 'm' : ''); let c = SHCACHE.get(key); if (c) return c;
+    const m = s.m, fw = m.fw, fh = m.fh, q = Math.min(56 / fw, 56 / fh, 1), w = Math.max(1, Math.round(fw * q)), h = Math.max(1, Math.round(fh * q));
+    c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+    if (mir) { g.translate(w, 0); g.scale(-1, 1); }
+    g.drawImage(s.img, li * fw, d * fh, fw, fh, 0, 0, w, h);
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#05070c'; g.fillRect(0, 0, w, h);
+    c.q = w / fw; c.ax = (mir ? fw - m.ax : m.ax) * c.q; c.ay = m.ay * c.q;
+    if (SHCACHE.size > 700) SHCACHE.delete(SHCACHE.keys().next().value);
+    SHCACHE.set(key, c); return c;
+  }
+  B.drawShadow = (ctx, name, team, label, angle, x, y, scale, alpha, lift) => {
+    const s = SPR[name + '_' + team]; if (!s) return false;
+    const li = s.m.labels.indexOf(label); if (li < 0) return false;
+    const [d, mir] = s.m.dirs === 1 ? [0, 0] : dirOf(angle);
+    const c = shadowOf(s, name + team, li, d, mir), sc = scale / s.m.ppm / c.q;
+    ctx.save(); ctx.globalAlpha = alpha;
+    // ground point -> origin; flip the silhouette down onto the floor, squash it and lean it to the right
+    ctx.transform(sc, 0, B.qual > 1 ? -0.55 * sc : 0, -0.42 * sc, x + (lift || 0) * 0.55, y + (lift || 0) * 0.3);
+    ctx.drawImage(c, -c.ax, -c.ay);
+    ctx.restore(); return true;
+  };
+
   // ---------------- sound (tiny synth, no files) ----------------
   let AC = null; const lastS = {};
   B.sfx = (kind) => {
@@ -119,7 +146,7 @@
     const cmdMe = opt.cmd, cmdAi = opt.enemy.cmd;
     G = {
       t: 0, time: CB.MATCH_SECS, overtime: false, over: false, opt,
-      ents: [], proj: [], fx: [], decals: [], scorch: [],
+      ents: [], proj: [], fx: [], decals: [], scorch: [], glows: [],
       motes: Array.from({ length: 26 }, () => ({ x: rnd(0, W), y: rnd(0, H), z: rnd(0.3, 3), p: rnd(0, 6) })),
       energy: [5, 5], crowns: [0, 0],
       deck: [shuffle(opt.deck.slice()), shuffle(opt.enemy.deck.slice())],
@@ -134,7 +161,7 @@
       G.ents.push(mkTower(tm, 'guard', 14.5, fy(28), 1, tm ? cmdAi : cmdMe));
       G.ents.push(mkTower(tm, 'king', 9, fy(29.6), -1, tm ? cmdAi : cmdMe));
     }
-    renderHand(); layout(); buildBg();
+    renderHand(); layout(); buildBg(); buildLight();
     B.running = true; last = performance.now(); acc = 0;
     requestAnimationFrame(frame);
     say('Battle!', 1.4);
@@ -225,6 +252,7 @@
     const col = o.col || '#ffb347', z = o.z == null ? 0.4 : o.z, d = o.delay || 0;
     G.fx.push({ type: 'fireball', x, y, z, r, t: -d, dur: 0.5 + r * 0.12, seed: Math.random() * 100 });
     G.fx.push({ type: 'flash', x, y, z, r: r * 1.3, t: -d, dur: 0.16 });
+    G.glows.push({ x, y, r: r * 2.6, t: -d, dur: 0.55, rgb: '255,170,80' });
     G.fx.push({ type: 'ring', x, y, R: r * 1.7, t: -d, dur: 0.38, col: '#ffe2a8' });
     const n = o.sparks == null ? Math.round(10 + r * 8) : o.sparks;
     for (let i = 0; i < n; i++) {
@@ -696,7 +724,7 @@
 
   // ---------------- headless simulation (tools/sim.js uses this to test balance) ----------------
   B.sim = (opt) => {
-    G = { t: 0, time: CB.MATCH_SECS, overtime: false, over: false, opt, ents: [], proj: [], fx: [], decals: [], scorch: [], energy: [5, 5], crowns: [0, 0],
+    G = { t: 0, time: CB.MATCH_SECS, overtime: false, over: false, opt, ents: [], proj: [], fx: [], decals: [], scorch: [], glows: [], energy: [5, 5], crowns: [0, 0],
       deck: [shuffle(opt.deck.slice()), shuffle(opt.enemy.deck.slice())], lvls: [opt.levels, opt.enemy.levels], msg: [], shake: 0,
       ai: { think: 1.5, lvl: opt.enemy.skill }, ai0: { think: 1.5, lvl: opt.skill }, arena: 0, sim: true };
     for (const tm of [0, 1]) {
@@ -743,7 +771,18 @@
     T = Math.min(VW / (W + 0.6), VH / needH);
     OX = (VW - W * T) / 2; OY = (VH - H * T * CB.SIN) / 2 + T * 1.45;
   }
-  B.layout = () => { if (G) { layout(); buildBg(); } };
+  B.layout = () => { if (G) { layout(); buildBg(); buildLight(); } };
+  let light = null;
+  function buildLight() {   // drawn once per layout at low resolution (it is all soft gradients)
+    const w = Math.max(2, Math.round(VW / 3)), h = Math.max(2, Math.round(VH / 3));
+    light = document.createElement('canvas'); light.width = w; light.height = h; const g = light.getContext('2d');
+    const tint = ['255,236,190', '255,214,150', '210,230,255', '220,150,255', '255,140,70'][G.arena] || '255,236,190';
+    let gr = g.createRadialGradient(w * 0.15, h * 0.05, 0, w * 0.15, h * 0.05, Math.hypot(w, h) * 0.75);
+    gr.addColorStop(0, `rgba(${tint},0.16)`); gr.addColorStop(1, `rgba(${tint},0)`); g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'source-over';
+    gr = g.createRadialGradient(w / 2, h * 0.48, Math.min(w, h) * 0.42, w / 2, h * 0.48, Math.hypot(w, h) * 0.62);
+    gr.addColorStop(0, 'rgba(4,6,14,0)'); gr.addColorStop(1, 'rgba(4,6,14,0.42)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }
 
   function buildBg() {
     const A = CB.ARENAS[G.arena]; const img = ARENA_IMG[G.arena];
@@ -789,6 +828,18 @@
     const f = v => clamp(Math.round(v + p * 2.55), 0, 255); return '#' + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1);
   }
 
+  // soft round puffs for smoke and dust (light centre, darker rim, feathered edge)
+  const PUFFC = {}; const DUST = ['#b8a98c', '#d8b884', '#e8eef4', '#8a8a92', '#5a4a44'];
+  function puffImg(a, b) {
+    const key = a + b; if (PUFFC[key]) return PUFFC[key];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+    for (let i = 0; i < 5; i++) {   // a few overlapping blobs so it is not a perfect disc
+      const ox = 32 + Math.cos(i * 1.3) * 7, oy = 32 + Math.sin(i * 1.3) * 6, r = i ? 18 : 26;
+      const gr = g.createRadialGradient(ox - 4, oy - 5, 0, ox, oy, r); gr.addColorStop(0, a); gr.addColorStop(0.55, b); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = i ? 0.55 : 0.9; g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    }
+    return (PUFFC[key] = cv);
+  }
   // Cached soft glow sprites (radial gradients drawn once per colour), used for bloom-style light.
   const GLOWC = {};
   function glowImg(rgb) {
@@ -823,6 +874,11 @@
       if (s.crack) { c.strokeStyle = `rgba(0,0,0,${a})`; c.lineWidth = 1.5; for (let i = 0; i < 6; i++) { const an = i * 1.05 + s.x; c.beginPath(); c.moveTo(sx(s.x), sy(s.y)); c.lineTo(sx(s.x + Math.cos(an) * s.r * 0.6), sy(s.y + Math.sin(an) * s.r * 0.6)); c.lineTo(sx(s.x + Math.cos(an + 0.3) * s.r * 1.1), sy(s.y + Math.sin(an + 0.3) * s.r * 1.1)); c.stroke(); } }
     }
     G.scorch = G.scorch.filter(s => !s.done);
+    // light pools on the floor from explosions, beams and muzzle flashes
+    if (G.glows.length) { c.globalCompositeOperation = 'lighter';
+      for (const g of G.glows) { g.t += fxDt; if (g.t < 0) continue; const k = g.t / g.dur; if (k >= 1) { g.done = true; continue; }
+        c.save(); c.translate(sx(g.x), sy(g.y)); c.scale(1, CB.SIN); glow(c, 0, 0, g.r * T, g.rgb, 0.55 * (1 - k) * (1 - k)); c.restore(); }
+      G.glows = G.glows.filter(g => !g.done); if (G.glows.length > 40) G.glows.splice(0, G.glows.length - 40); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; }
     drawPlacement(c);
     // tower pads: a dark stone ring with the team's light
     for (const e of G.ents) if (e.kind === 'tower') {
@@ -831,11 +887,13 @@
       c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = T * 0.16; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * 0.96, ry * 0.96, 0, 0, 7); c.stroke();
       c.strokeStyle = tc[0]; c.globalAlpha = e.alive ? 0.75 : 0.25; c.lineWidth = Math.max(1.5, T * 0.07); c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * 0.96, ry * 0.96, 0, 0, 7); c.stroke(); c.globalAlpha = 1;
     }
+    if (B.qual > 0) for (const e of G.ents) if (e.kind === 'tower' && e.alive) B.drawShadow(c, e.sub, TEAM[e.team], 'i0', e.face, sx(e.x), sy(e.y), T * 0.85, 0.3, 0);
     for (const d of G.decals) B.drawSprite(c, d.sub === 'king' ? 'kingx' : 'guardx', TEAM[d.team], 'i0', 0, sx(d.x), sy(d.y), T * 0.85);
     // shadows + team rings under every robot
     for (const e of G.ents) if (e.alive && e.kind !== 'tower') {
       const rx = e.r * T * 1.35, ry = rx * CB.SIN * 0.75;
-      c.fillStyle = 'rgba(0,0,0,.38)'; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx, ry, 0, 0, 7); c.fill();
+      c.fillStyle = B.qual > 0 ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.38)'; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * (B.qual > 0 ? 0.8 : 1), ry * (B.qual > 0 ? 0.8 : 1), 0, 0, 7); c.fill();
+      if (e.lab && B.qual > 0) { const lift = e.air ? T * 1.6 : (e.dropZ || 0) * T; B.drawShadow(c, e.c.sprite, TEAM[e.team], e.lab, e.face, sx(e.x), sy(e.y), T * US * (SPS[e.c.sprite] || 1), (e.air ? 0.2 : 0.34) * (e.deploy > 0 ? 1 - e.deploy * 0.7 : 1), lift); }
       const tc = TCOL(e.team); c.strokeStyle = tc[0]; c.globalAlpha = 0.75; c.lineWidth = Math.max(1.5, T * 0.09);
       c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * 0.95, ry * 0.95, 0, 0, 7); c.stroke(); c.globalAlpha = 1;
     }
@@ -848,6 +906,7 @@
     c.save(); c.globalCompositeOperation = 'lighter';
     for (const m of G.motes) { m.p += fxDt; m.z += fxDt * 0.15; if (m.z > 3.5) { m.z = 0.2; m.x = rnd(0, W); m.y = rnd(0, H); } glow(c, sx(m.x + Math.sin(m.p * 0.7) * 0.4), sy(m.y, m.z), T * 0.16, argb, 0.35 * Math.sin(Math.min(Math.PI, m.z / 3.5 * Math.PI))); }
     c.restore();
+    if (light) c.drawImage(light, -shx, -shy, VW, VH);
     for (const e of list) drawBar(c, e);
     drawGhost(c);
     c.restore();
@@ -858,7 +917,10 @@
   function drawEnt(c, e) {
     let kx = 0, ky = 0;
     if (e.kickT > 0) { e.kickT -= fxDt; const k = Math.sin(Math.max(0, e.kickT) / 0.14 * Math.PI) * e.kickD; kx = Math.cos(e.kickA) * k; ky = Math.sin(e.kickA) * k; }   // flinch away from a hit
-    const x = sx(e.x + kx), y = sy(e.y + ky, e.air ? 1.6 + Math.sin(G.t * 3 + e.id) * 0.08 : 0);
+    // deploy: ground robots drop in from above and land with a puff of dust
+    e.dropZ = (!e.air && e.kind !== 'tower' && e.deploy > 0.62) ? Math.pow((e.deploy - 0.62) / 0.38, 2) * 5 : 0;
+    if (e.kind !== 'tower' && !e.air && !e.landed && e.deploy <= 0.62) { e.landed = true; if (e.deploy > 0.3) land(e); }
+    const x = sx(e.x + kx), y = sy(e.y + ky, e.air ? 1.6 + Math.sin(G.t * 3 + e.id) * 0.08 : e.dropZ);
     if (e.kind === 'tower') {
       const lab = e.fireT < 0.13 ? ((e.shotN || 0) % 2 ? 'a1' : 'a0') : 'i0';
       const team = TEAM[e.team];
@@ -877,6 +939,7 @@
     else if (e.air) lab = 'w' + (Math.floor(e.walkPh * 8 + G.t * 7) % 8);
     else if (e.anim === 'walk') lab = 'w' + (Math.floor(e.walkPh * 8) % 8);
     if (e.air && e.anim !== 'walk') e.walkPh += 0.01;
+    e.lab = lab;
     const alpha = e.deploy > 0 ? 1 - e.deploy * 0.7 : 1;
     if (!B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), alpha)) fallback(c, e, x, y);
     if (e.flash > 0) { c.save(); c.globalCompositeOperation = 'lighter'; B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), Math.min(0.6, e.flash * 5)); c.restore(); }   // hit flash: the robot itself brightens
@@ -888,6 +951,11 @@
       for (let k = 0; k < 5; k++) { const off = rnd(-0.5, 0.5); const yy = rnd(0.3, 1.0); c.beginPath(); c.moveTo(sx(e.x + bx_ * 0.6 + by_ * off), sy(e.y + by_ * 0.6 - bx_ * off, yy)); c.lineTo(sx(e.x + bx_ * rnd(1.4, 2.4) + by_ * off), sy(e.y + by_ * rnd(1.4, 2.4) - bx_ * off, yy)); c.stroke(); }
       glow(c, x, y - T * 0.6, T * 1.1, '255,240,120', 0.35); c.restore(); }
     if (e.c.beam && e.anim === 'attack' && e.beamTarget && e.beamTarget.alive && e.locked) drawBeam(c, e, e.beamTarget);
+  }
+  function land(e) {
+    const big = e.r > 0.7;
+    for (let i = 0; i < (big ? 10 : 6); i++) { const a = i / (big ? 10 : 6) * 6.283; G.fx.push({ type: 'dust', x: e.x + Math.cos(a) * e.r * 0.6, y: e.y + Math.sin(a) * e.r * 0.6, vx: Math.cos(a) * 2.4, vy: Math.sin(a) * 2.4, t: 0, dur: 0.6, size: big ? 0.4 : 0.26 }); }
+    if (big) { G.shake = Math.max(G.shake, 0.12); G.fx.push({ type: 'ring', x: e.x, y: e.y, R: e.r * 2.2, t: 0, dur: 0.35, col: '#e8e0d0' }); }
   }
   function fallback(c, e, x, y) {   // used only if a sprite sheet failed to load
     c.fillStyle = e.team ? '#d6452c' : '#2f6ae8'; c.beginPath(); c.arc(x, y - e.r * T, e.r * T, 0, 7); c.fill();
@@ -1006,14 +1074,13 @@
         c.globalCompositeOperation = 'lighter'; c.globalAlpha = 1 - k; c.strokeStyle = f.col; c.lineWidth = Math.max(1, f.size * T * 0.8); c.lineCap = 'round';
         const X = sx(f.x), Y = sy(f.y, f.z); c.beginPath(); c.moveTo(X, Y); c.lineTo(X - f.vx * dt * T * 1.6, Y - (f.vy * CB.SIN - f.vz * CB.COS) * dt * T * 1.6); c.stroke();
       } else if (f.type === 'smoke') {
-        f.z += (f.vz || 0.8) * dt;
-        c.globalCompositeOperation = 'source-over'; c.globalAlpha = (f.light ? 0.35 : 0.5) * (1 - k) * Math.min(1, f.t * 10);
-        c.fillStyle = f.light ? '#9aa0a8' : '#2c2a2c';
-        c.beginPath(); c.arc(sx(f.x), sy(f.y, f.z), f.size * T * (0.6 + k * 1.1), 0, 7); c.fill();
+        f.z += (f.vz || 0.8) * dt; f.x += (f.drift || 0.25) * dt;
+        c.globalCompositeOperation = 'source-over'; c.globalAlpha = (f.light ? 0.5 : 0.72) * (1 - k) * Math.min(1, f.t * 10);
+        const rad = f.size * T * (0.8 + k * 1.5); c.drawImage(puffImg(f.light ? '#b4b8be' : '#3a3634', f.light ? '#7a7e86' : '#1c1a1c'), sx(f.x) - rad, sy(f.y, f.z) - rad, rad * 2, rad * 2);
       } else if (f.type === 'dust') {
-        f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; f.z += 0.4 * dt;
-        c.globalCompositeOperation = 'source-over'; c.globalAlpha = 0.45 * (1 - k); c.fillStyle = '#6a6258';
-        c.beginPath(); c.arc(sx(f.x), sy(f.y, f.z), f.size * T * (0.5 + k), 0, 7); c.fill();
+        f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.92; f.vy *= 0.92; f.z = (f.z || 0) + 0.4 * dt;
+        c.globalCompositeOperation = 'source-over'; c.globalAlpha = 0.6 * (1 - k); const rad = f.size * T * (0.7 + k * 1.2);
+        c.drawImage(puffImg(DUST[G.arena] || '#a89a86', '#6a6258'), sx(f.x) - rad, sy(f.y, f.z) - rad, rad * 2, rad * 2);
       } else if (f.type === 'debris') {
         f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.vz -= 16 * dt; f.rot += f.vr * dt;
         if (f.z < 0) { f.z = 0; f.vz = -f.vz * 0.35; f.vx *= 0.6; f.vy *= 0.6; f.vr *= 0.5; }
@@ -1180,7 +1247,7 @@
   function flashEnergy() { const e = $('eBar'); e.classList.remove('shake'); void e.offsetWidth; e.classList.add('shake'); }
 
   // ---------------- loop ----------------
-  let last = 0, acc = 0;
+  let last = 0, acc = 0; const QA = { n: 0, sum: 0 }; B.qual = 2;
   function frame(ts) {
     if (!B.running || !G) return;
     const el = Math.min(0.1, (ts - last) / 1000); last = ts; acc += el;
@@ -1188,6 +1255,8 @@
     while (acc >= DT) { if (!G.over) step(DT); acc -= DT; if (!G) return; }
     G.shake = Math.max(0, G.shake - el);
     fxDt = el; draw(); hud();
+    // quality guard: if a device can't hold ~48 fps, drop the robot-shaped shadows (skewed -> straight -> plain ovals)
+    if (G.t > 2 && B.qual > 0) { QA.n++; QA.sum += el; if (QA.n >= 120) { if (QA.sum / QA.n > 1 / 48) B.qual--; QA.n = 0; QA.sum = 0; } }
     requestAnimationFrame(frame);
   }
   B.G = () => G;

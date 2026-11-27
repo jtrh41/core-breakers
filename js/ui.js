@@ -12,6 +12,7 @@
   function portrait(id) {   // robots: small pictures made by stitch.py; spells: drawn here
     if (PORT[id]) return PORT[id];
     const C = CB.CARDS[id];
+    if (C.type === 'spell' && (id === 'missile' || id === 'emp')) return (PORT[id] = 'art/card_' + id + '.webp?v=2');   // rendered 3D pictures
     if (C.type === 'spell') { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 190; spellArt(cv.getContext('2d'), id); return (PORT[id] = cv.toDataURL()); }
     const sh = (CB.SHEETS || {})[C.sprite];
     return (PORT[id] = 'art/card_' + C.sprite + '.webp?v=' + (sh && sh.v || '1'));
