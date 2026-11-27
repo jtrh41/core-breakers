@@ -192,6 +192,7 @@
   function damage(e, amt, src) {
     if (!e.alive || amt <= 0) return;
     e.hp -= amt; e.flash = 0.12;
+    if (src && e.kind !== 'tower' && !G.sim) { e.kickT = 0.14; e.kickA = Math.atan2(e.y - src.y, e.x - src.x); e.kickD = Math.min(0.35, 0.08 + amt / 900); }
     if (e.kind === 'tower' && e.sub === 'king' && !e.active) { e.active = true; }
     if (e.hp <= 0) kill(e, src);
   }
@@ -238,6 +239,7 @@
     if (o.shake) setTimeout(() => { if (G) G.shake = Math.max(G.shake, o.shake); }, d * 1000);
   }
   function towerBlast(e, r) {
+    G.hitstop = 0.12;
     explode(e.x, e.y, r, { z: 1.2, debris: 34, big: true, shake: 0.5 });
     for (let k = 0; k < 3; k++) explode(e.x + rnd(-1.2, 1.2), e.y + rnd(-0.8, 0.8), r * 0.55, { z: rnd(0.8, 2.2), delay: 0.15 + k * 0.17, debris: 6, scorch: false });
   }
@@ -270,19 +272,19 @@
       G.fx.push({ type: 'ring', x: fx, y: fy, R: 2.6, t: 0, dur: 0.45, col: '#ffe0b0' }); G.fx.push({ type: 'ring', x: fx, y: fy, R: 1.6, t: -0.05, dur: 0.35, col: '#ffffff' });
       for (let i = 0; i < 12; i++) { const aa = i / 12 * 6.283; G.fx.push({ type: 'dust', x: fx + Math.cos(aa) * 0.6, y: fy + Math.sin(aa) * 0.6, vx: Math.cos(aa) * 2.4, vy: Math.sin(aa) * 2.4, z: 0.1, t: 0, dur: rnd(0.7, 1.1), size: rnd(0.4, 0.7) }); }
       for (let i = 0; i < 8; i++) G.fx.push({ type: 'debris', x: fx, y: fy, z: 0.1, vx: rnd(-3, 3), vy: rnd(-3, 3), vz: rnd(3, 6), rot: rnd(0, 6), vr: rnd(-12, 12), w: rnd(0.06, 0.14), h: rnd(0.05, 0.1), col: '#4a4f58', t: 0, dur: 0.9 });
-      G.scorch.push({ x: fx, y: fy, r: 1.0, t: 0, dur: 5, crack: true }); G.shake = Math.max(G.shake, 0.28); B.sfx('boom');
+      G.scorch.push({ x: fx, y: fy, r: 1.0, t: 0, dur: 5, crack: true }); G.shake = Math.max(G.shake, 0.32); G.hitstop = 0.07; B.sfx('boom');
     }
     else if (sp === 'hound') {
       G.fx.push({ type: 'zap', x1: u.x + Math.cos(u.face) * u.r, y1: u.y + Math.sin(u.face) * u.r, x2: hx, y2: hy, z: hz, t: 0, dur: 0.22, col: p.charged ? '#fff27a' : tc[0] });
       sparksAt(hx, hy, hz, p.charged ? 18 : 8, p.charged ? '#fff27a' : tc[1], 5);
-      if (p.charged) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: 1.8, t: 0, dur: 0.35, col: '#fff27a' }); G.shake = Math.max(G.shake, 0.15); B.sfx('zap'); }
+      if (p.charged) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: 1.8, t: 0, dur: 0.35, col: '#fff27a' }); G.shake = Math.max(G.shake, 0.18); G.hitstop = 0.06; B.sfx('zap'); }
     }
     else if (sp === 'spider') { G.fx.push({ type: 'zap', x1: u.x, y1: u.y, x2: hx, y2: hy, z: hz * 0.6, t: 0, dur: 0.14, col: tc[0], thin: true }); sparksAt(hx, hy, hz, 4, tc[1], 2.5); }
     else sparksAt(hx, hy, hz, 8, tc[1], 3);
   }
   function shoot(u, e, kind, amt) {
     const tower = u.kind === 'tower';
-    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? 1.75 : ({ rocket: 1.7, shell: 0.9, laser: 1.05 })[kind] || 1;
+    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? 1.75 : ({ rocket: 2.0, shell: 0.9, laser: 1.0 })[kind] || 1;
     const fwd = tower ? u.r * 0.9 : u.r * US * 0.9 + (kind === 'laser' ? 0.4 : 0.2);
     const spd = { laser: 17, shell: 12, rocket: 9, tower: 14 }[kind];
     const x = u.x + Math.cos(u.face) * fwd, y = u.y + Math.sin(u.face) * fwd;
@@ -510,7 +512,7 @@
       if (c.stun && e.kind === 'tower') e.cd = Math.max(e.cd, c.stun);
       if (c.knock && e.kind === 'troop' && e.mass < 10 && e.alive) { const a = Math.atan2(e.y - s.y, e.x - s.x); e.x += Math.cos(a) * c.knock; e.y += Math.sin(a) * c.knock; }
     }
-    if (s.card === 'missile') { explode(s.x, s.y, c.radius * 0.95, { debris: 18, big: true, shake: 0.4 }); B.sfx('boom'); }
+    if (s.card === 'missile') { explode(s.x, s.y, c.radius * 0.95, { debris: 18, big: true, shake: 0.4 }); G.hitstop = 0.08; B.sfx('boom'); }
     else { G.fx.push({ type: 'emp', x: s.x, y: s.y, R: c.radius, t: 0, dur: 0.6 }); B.sfx('zap'); }
   }
 
@@ -751,7 +753,9 @@
   function hexRgb(h) { const n = parseInt(h.slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; }
 
   function drawEnt(c, e) {
-    const x = sx(e.x), y = sy(e.y, e.air ? 1.6 + Math.sin(G.t * 3 + e.id) * 0.08 : 0);
+    let kx = 0, ky = 0;
+    if (e.kickT > 0) { e.kickT -= fxDt; const k = Math.sin(Math.max(0, e.kickT) / 0.14 * Math.PI) * e.kickD; kx = Math.cos(e.kickA) * k; ky = Math.sin(e.kickA) * k; }   // flinch away from a hit
+    const x = sx(e.x + kx), y = sy(e.y + ky, e.air ? 1.6 + Math.sin(G.t * 3 + e.id) * 0.08 : 0);
     if (e.kind === 'tower') {
       const lab = e.fireT < 0.13 ? ((e.shotN || 0) % 2 ? 'a1' : 'a0') : 'i0';
       const team = TEAM[e.team];
@@ -1044,6 +1048,7 @@
   function frame(ts) {
     if (!B.running || !G) return;
     const el = Math.min(0.1, (ts - last) / 1000); last = ts; acc += el;
+    if (G.hitstop > 0) { G.hitstop -= el; acc = 0; }   // brief freeze on heavy hits
     while (acc >= DT) { if (!G.over) step(DT); acc -= DT; if (!G) return; }
     G.shake = Math.max(0, G.shake - el);
     fxDt = el; draw(); hud();
