@@ -5,8 +5,9 @@
   const W = CB.W, H = CB.H, R0 = CB.RIVER[0], R1 = CB.RIVER[1], MIDY = (R0 + R1) / 2;
   const TEAM = ['blue', 'red'];
   const US = 1.45;   // robots are drawn larger than their footprint so they read well on a phone
+  const SPS = { jet: 0.8, minidrone: 0.9 };   // per-robot fine-tuning of on-screen size
   const FD = 0.09;   // seconds per attack frame (6 frames: wind-up, strike, follow-through)
-  const IMPACT = { sentinel: 2, blaster: 1, spider: 2, turret: 1, jet: 1, titan: 3, rocket: 1, hound: 2 };   // frame where the hit lands
+  const IMPACT = { sentinel: 2, blaster: 1, spider: 2, turret: 1, jet: 1, titan: 3, rocket: 1, hound: 2, rail: 2, arc: 1, bombard: 1, bomber: 2, minidrone: 1, boombot: 2 };   // frame where the hit lands
   const TCOL = tm => tm ? ['#ff7a2a', '#ffd6a8', '255,122,42'] : ['#38e6ff', '#dafcff', '56,230,255'];
   const DT = 1 / 60;   // simulation steps per second: 60 keeps movement smooth on 60/120 Hz screens
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -163,11 +164,12 @@
     return best;
   }
   function findTarget(u) {
-    if (u.targets === 'allies') return null;
+    if (u.targets === 'allies' || u.targets === 'none') return null;
     let best = null, bd = 1e9;
     for (const e of G.ents) {
       if (!e.alive || e.team === u.team || !canHit(u, e)) continue;
       const g = gap(u, e);
+      if (u.c && u.c.minRange && g < u.c.minRange) continue;
       if (g <= u.sight && g < bd) { bd = g; best = e; }
     }
     if (best) return best;
@@ -196,8 +198,9 @@
     if (e.kind === 'tower' && e.sub === 'king' && !e.active) { e.active = true; }
     if (e.hp <= 0) kill(e, src);
   }
-  function kill(e) {
+  function kill(e, src, quiet) {
     e.alive = false; e.hp = 0;
+    if (quiet) return;
     if (e.kind === 'tower') {
       const other = 1 - e.team;
       if (e.sub === 'king') { G.crowns[other] = 3; towerBlast(e, 3.2); B.sfx('tower'); G.shake = 0.9; end(); }
@@ -260,7 +263,12 @@
   // The hit lands on the animation's impact frame.
   function resolve(u) {
     const p = u.pend; u.pend = null; const e = p.e, c = u.c, tc = TCOL(u.team);
-    if (c.proj) { if (e.alive) { shoot(u, e, c.proj, p.amt); B.sfx(c.proj === 'laser' ? 'laser' : 'shell'); } return; }
+    if (c.kamikaze) {   // Boom Bot: blow up on contact
+      blast(u.team, u.x + Math.cos(u.face) * u.r, u.y + Math.sin(u.face) * u.r, c.splash, p.amt, 'ground', u); u.hp = 0; kill(u, null, true); return;
+    }
+    if (c.proj === 'rail') return railShot(u, e, p.amt);
+    if (c.proj === 'chain') return chainShot(u, e, p.amt);
+    if (c.proj) { if (e.alive) { shoot(u, e, c.proj, p.amt); B.sfx(c.proj === 'laser' || c.proj === 'minimissile' ? 'laser' : 'shell'); } return; }
     if (!e.alive || gap(u, e) > u.range + 0.8) return;
     damage(e, p.amt, u); B.sfx('hit');
     if (G.sim) return;
@@ -282,13 +290,56 @@
     else if (sp === 'spider') { G.fx.push({ type: 'zap', x1: u.x, y1: u.y, x2: hx, y2: hy, z: hz * 0.6, t: 0, dur: 0.14, col: tc[0], thin: true }); sparksAt(hx, hy, hz, 4, tc[1], 2.5); }
     else sparksAt(hx, hy, hz, 8, tc[1], 3);
   }
+  // splash damage at a point (bombs, mortar shells, boom bots)
+  function blast(team, x, y, r, amt, targets, src) {
+    for (const o of G.ents) {
+      if (!o.alive || o.team === team) continue;
+      if (targets === 'ground' && o.air) continue;
+      if (Math.hypot(o.x - x, o.y - y) <= r + o.r * 0.5) damage(o, o.kind === 'tower' ? Math.round(amt * 0.8) : amt, src);
+    }
+    explode(x, y, r * 0.95, { debris: 10, shake: 0.18, big: r > 1.4 }); B.sfx('boom'); if (!G.sim) G.hitstop = Math.max(G.hitstop || 0, 0.04);
+  }
+  // Rail Lancer: one shot that pierces everything along a straight line
+  function railShot(u, e, amt) {
+    const a = Math.atan2(e.y - u.y, e.x - u.x), x0 = u.x + Math.cos(a) * (u.r + 0.4), y0 = u.y + Math.sin(a) * (u.r + 0.4);
+    const L = u.c.pierce, x1 = x0 + Math.cos(a) * L, y1 = y0 + Math.sin(a) * L;
+    for (const o of G.ents) {
+      if (!o.alive || o.team === u.team || !canHit(u, o)) continue;
+      const t = clamp(((o.x - x0) * Math.cos(a) + (o.y - y0) * Math.sin(a)) / L, 0, 1);
+      const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
+      if (Math.hypot(o.x - px, o.y - py) <= o.r + 0.35) { damage(o, amt, u); if (!G.sim) sparksAt(o.x, o.y, o.air ? 1.8 : 0.9, 10, TCOL(u.team)[1], 5); }
+    }
+    B.sfx('zap'); if (G.sim) return;
+    G.fx.push({ type: 'rail', x1: x0, y1: y0, x2: x1, y2: y1, z: 1.5, t: 0, dur: 0.38, col: TCOL(u.team) });
+    G.fx.push({ type: 'glow', x: x0, y: y0, z: 1.5, r: 1.0, t: 0, dur: 0.18, col: TCOL(u.team)[2] }); G.shake = Math.max(G.shake, 0.12);
+  }
+  // Arc Trooper: lightning that jumps from the target to more enemies
+  function chainShot(u, e, amt) {
+    if (!e.alive) return;
+    const hit = [e]; let cur = e, pts = [[u.x + Math.cos(u.face) * u.r, u.y + Math.sin(u.face) * u.r, 1.6]], k = 1;
+    damage(e, amt, u); pts.push([e.x, e.y, e.air ? 1.8 : 0.9]);
+    for (let j = 0; j < u.c.chain; j++) {
+      let nx = null, nd = 3.3;
+      for (const o of G.ents) { if (!o.alive || o.team === u.team || hit.includes(o) || !canHit(u, o)) continue; const d = Math.hypot(o.x - cur.x, o.y - cur.y); if (d < nd) { nd = d; nx = o; } }
+      if (!nx) break; k *= 0.7; damage(nx, Math.round(amt * k), u); hit.push(nx); cur = nx; pts.push([nx.x, nx.y, nx.air ? 1.8 : 0.9]);
+    }
+    B.sfx('zap'); if (G.sim) return;
+    G.fx.push({ type: 'chain', pts, t: 0, dur: 0.32, col: TCOL(u.team) });
+    for (const o of hit) sparksAt(o.x, o.y, o.air ? 1.8 : 0.9, 6, '#ffffff', 3);
+  }
   function shoot(u, e, kind, amt) {
     const tower = u.kind === 'tower';
-    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? 1.75 : ({ rocket: 2.0, shell: 0.9, laser: 1.0 })[kind] || 1;
+    const z0 = tower ? (u.sub === 'king' ? 3.0 : 2.3) : u.air ? (kind === 'bomb' ? 1.3 : 1.75) : ({ rocket: 2.0, shell: 0.9, laser: 1.0, mortar: 1.6 })[kind] || 1;
     const fwd = tower ? u.r * 0.9 : u.r * US * 0.9 + (kind === 'laser' ? 0.4 : 0.2);
-    const spd = { laser: 17, shell: 12, rocket: 9, tower: 14 }[kind];
+    const spd = { laser: 17, shell: 12, rocket: 9, tower: 14, minimissile: 11, mortar: 7, bomb: 4 }[kind];
     const x = u.x + Math.cos(u.face) * fwd, y = u.y + Math.sin(u.face) * fwd;
-    G.proj.push({ kind, team: u.team, x, y, z: z0, tgt: e, tx: e.x, ty: e.y, spd, dmg: amt, splash: u.c && u.c.splash || 0, src: u, targets: u.targets, trail: [], age: 0 });
+    const pr = { kind, team: u.team, x, y, z: z0, tgt: e, tx: e.x, ty: e.y, spd, dmg: amt, splash: u.c && u.c.splash || 0, src: u, targets: u.targets === 'buildings' ? 'ground' : u.targets, trail: [], age: 0 };
+    if (kind === 'mortar' || kind === 'bomb') {   // lobbed / dropped: fixed landing point, flight time
+      pr.sx = x; pr.sy = y; pr.sz = z0; pr.tgt = null; pr.dur = kind === 'bomb' ? 0.45 : Math.max(0.8, Math.hypot(e.x - x, e.y - y) / 6.5);
+      if (kind === 'bomb') { pr.sx = pr.x = e.x; pr.sy = pr.y = e.y - 0.01; }
+      if (!G.sim) G.fx.push({ type: 'target', x: e.x, y: e.y, R: pr.splash, t: 0, dur: pr.dur, col: TCOL(u.team)[0] });
+    }
+    G.proj.push(pr);
     if (!G.sim) G.fx.push({ type: 'glow', x, y, z: z0, r: kind === 'rocket' ? 0.9 : tower ? 0.8 : 0.55, t: 0, dur: 0.12, col: kind === 'rocket' || kind === 'shell' || tower ? '255,190,90' : TCOL(u.team)[2] });
   }
 
@@ -320,18 +371,32 @@
     if (u.deploy > 0) { u.deploy -= dt; return; }
     if (u.stun > 0) { u.stun -= dt; u.anim = 'idle'; u.beamT = 0; u.pend = null; return; }
     if (u.kind === 'building') { u.hp -= u.maxHp / u.life * dt; if (u.hp <= 0) return kill(u); }
+    if (u.slowT > 0) u.slowT -= dt;
+    if (u.c.spawn) {   // Drone Hive: launch drones on a timer
+      u.spawnT = (u.spawnT == null ? 0.6 : u.spawnT) - dt;
+      if (u.spawnT <= 0) {
+        u.spawnT = u.hit; u.atkT = 0; u.anim = 'attack';
+        for (let k = 0; k < u.c.spawn.n; k++) {
+          const d = mkUnit(u.team, u.c.spawn.id, u.lvl, u.x + (k ? 0.45 : -0.45), u.y + (u.team ? 0.7 : -0.7)); d.deploy = 0.25; G.ents.push(d);
+          if (!G.sim) { sparksAt(d.x, d.y, 0.9, 6, TCOL(u.team)[1], 3); G.fx.push({ type: 'glow', x: d.x, y: d.y, z: 0.9, r: 0.6, t: 0, dur: 0.2, col: TCOL(u.team)[2] }); }
+        }
+      }
+      return;
+    }
     if (u.c.heal) return thinkMedic(u, dt);
     if (u.pend && u.atkT >= u.pend.at) resolve(u);
-    u.retarget -= dt; u.cd -= dt;
+    u.retarget -= dt; u.cd -= dt * (u.slowT > 0 ? 0.6 : 1);
     const t = u.target;
     if (!t || !t.alive || u.retarget <= 0 && !u.locked || (t && !t.alive)) { u.target = findTarget(u); u.retarget = 0.3; u.locked = false; }
     const e = u.target;
     if (!e) { u.anim = 'idle'; return; }
     const g = gap(u, e);
-    if (g <= u.range) {
+    if (u.c.minRange && g < u.c.minRange && e.kind === 'troop') { u.target = null; u.locked = false; }
+    if (g <= u.range && u.target) {
       u.locked = true;
       u.face = turn(u.face, Math.atan2(e.y - u.y, e.x - u.x), dt * 10);
       if (u.c.beam) return beam(u, e, dt);
+      if (u.c.cone) return flame(u, e, dt);
       if (u.cd <= 0 && !u.pend) { attack(u, e); u.cd = u.hit; }
       else if (u.atkT > FD * 6) u.anim = 'idle';
       u.moved = 0; u.charging = false;
@@ -342,7 +407,7 @@
     if (u.pend || u.atkT < FD * 5) return;   // finish the swing
     const [wx, wy] = waypoint(u, e.x, e.y);
     const a = Math.atan2(wy - u.y, wx - u.x);
-    let sp = u.speed * (u.charging ? 2 : 1);
+    let sp = u.speed * (u.charging ? 2 : 1) * (u.slowT > 0 ? 1 - (u.slowAmt || 0.4) : 1);
     u.x += Math.cos(a) * sp * dt; u.y += Math.sin(a) * sp * dt; u.moved += sp * dt;
     if (u.c.charge && !u.charging && u.moved > 2) { u.charging = true; B.sfx('zap'); }
     u.face = turn(u.face, a, dt * 8); u.anim = 'walk'; u.walkPh += dt * sp / 1.4;
@@ -353,11 +418,33 @@
     if (u.beamTarget !== e) { u.beamTarget = e; u.beamT = 0; }
     u.beamT += dt; u.anim = 'attack'; u.atkT = 0.1;
     u.cd -= 0; if (u.cd <= 0) {
-      const st = u.beamT < 2 ? 0 : u.beamT < 4 ? 1 : 2;
-      damage(e, Math.round(u.c.ramp[st] * CB.LVL_MUL(u.lvl)), u); u.cd = u.hit;
+      const st = u.c.ramp ? (u.beamT < 2 ? 0 : u.beamT < 4 ? 1 : 2) : 0;
+      damage(e, Math.round((u.c.ramp ? u.c.ramp[st] : u.c.dmg) * CB.LVL_MUL(u.lvl)), u); u.cd = u.hit;
+      if (u.c.frost) {   // slow the target and everyone around it
+        for (const o of G.ents) if (o.alive && o.team !== u.team && o.kind !== 'tower' && Math.hypot(o.x - e.x, o.y - e.y) <= u.c.frost.r + o.r) { o.slowT = u.c.frost.t; o.slowAmt = u.c.frost.slow; }
+        if (!G.sim) { G.fx.push({ type: 'ring', x: e.x, y: e.y, R: u.c.frost.r, t: 0, dur: 0.4, col: '#bff4ff' }); for (let i = 0; i < 4; i++) G.fx.push({ type: 'spark', x: e.x + rnd(-0.8, 0.8), y: e.y + rnd(-0.6, 0.6), z: rnd(0.2, 1.2), vx: 0, vy: 0, vz: -0.5, t: 0, dur: 0.6, col: '#e8fbff', size: 0.07 }); }
+      }
       B.sfx('beam');
       G.fx.push({ type: 'spark', x: e.x, y: e.y, z: e.air ? 1.8 : 0.7, vx: rnd(-2, 2), vy: rnd(-2, 2), vz: rnd(1, 3), t: 0, dur: 0.3, col: '#ffe08a', size: 0.08 + st * 0.03 });
     }
+  }
+
+  // Scorcher: a cone of flame in front of it; everything inside burns
+  function flame(u, e, dt) {
+    u.anim = 'attack'; u.atkT = 0.1; u.flaming = 0.2;
+    if (!G.sim) for (let i = 0; i < 3; i++) {
+      const a = u.face + rnd(-u.c.cone.a, u.c.cone.a) * 0.8, sp = rnd(4.5, 7);
+      G.fx.push({ type: 'flamep', x: u.x + Math.cos(u.face) * (u.r + 0.5), y: u.y + Math.sin(u.face) * (u.r + 0.5), z: 0.65, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, dur: u.c.cone.r / sp * 1.15, size: rnd(0.25, 0.4) });
+    }
+    if (u.cd > 0) return;
+    u.cd = u.hit; const amt = Math.round(u.c.dmg * CB.LVL_MUL(u.lvl));
+    for (const o of G.ents) {
+      if (!o.alive || o.team === u.team || o.air) continue;
+      const d = Math.hypot(o.x - u.x, o.y - u.y); if (d - o.r > u.c.cone.r + u.r) continue;
+      let da = Math.atan2(o.y - u.y, o.x - u.x) - u.face; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      if (Math.abs(da) <= u.c.cone.a + o.r / Math.max(0.5, d)) damage(o, amt, u);
+    }
+    B.sfx('beam');
   }
 
   function thinkMedic(u, dt) {
@@ -427,6 +514,14 @@
   }
 
   function moveProj(p, dt) {
+    if (p.dur) {   // lobbed mortar shell or falling bomb
+      p.age += dt; const k = Math.min(1, p.age / p.dur);
+      p.x = p.sx + (p.tx - p.sx) * k; p.y = p.sy + (p.ty - p.sy) * k;
+      p.z = p.kind === 'bomb' ? p.sz * (1 - k * k) : p.sz * (1 - k) + Math.sin(k * Math.PI) * Math.max(2.5, p.dur * 3.5);
+      if (!G.sim && p.kind === 'mortar' && Math.random() < 0.6) G.fx.push({ type: 'smoke', x: p.x, y: p.y, z: p.z, t: 0, dur: 0.6, size: 0.18, vz: 0.2, light: true });
+      if (k >= 1) { p.done = true; blast(p.team, p.tx, p.ty, p.splash, p.dmg, p.targets, p.src); }
+      return;
+    }
     if (p.tgt && p.tgt.alive) { p.tx = p.tgt.x; p.ty = p.tgt.y; }
     const tz = p.tgt && p.tgt.air ? 1.8 : p.tgt && p.tgt.kind === 'tower' ? 1.4 : 0.6;
     const dx = p.tx - p.x, dy = p.ty - p.y, dz = tz - p.z; const d = Math.hypot(dx, dy, dz);
@@ -449,7 +544,7 @@
     }
     p.x += dx / d * s; p.y += dy / d * s; p.z += dz / d * s;
     p.age += dt;
-    if (p.kind === 'rocket') { p.z += Math.sin(Math.min(1, p.age * 3)) * dt * 1.2; if (!G.sim && Math.random() < 0.8) G.fx.push({ type: 'smoke', x: p.x, y: p.y, z: p.z, t: 0, dur: rnd(0.5, 0.9), size: rnd(0.14, 0.24), vz: 0.3, light: true }); }
+    if (p.kind === 'rocket' || p.kind === 'minimissile') { p.z += Math.sin(Math.min(1, p.age * 3)) * dt * 1.2; if (!G.sim && Math.random() < 0.8) G.fx.push({ type: 'smoke', x: p.x, y: p.y, z: p.z, t: 0, dur: rnd(0.5, 0.9), size: rnd(0.14, 0.24), vz: 0.3, light: true }); }
   }
 
   // ---------------- playing cards ----------------
@@ -558,14 +653,15 @@
       const air = threats.some(t => t.air), swarm = threats.filter(t => t.c.count >= 3 && !t.air).length >= 3, big = threats.some(t => t.maxHp > 1800);
       const tower = threats.some(t => t.targets === 'buildings');
       let card = null;
-      if (air) card = pick(['blaster', 'jet', 'rocket', 'colossus']);
-      if (!card && swarm) card = pick(['rocket', 'emp', 'sentinel', 'colossus']);
-      if (!card && big) card = pick(['spider', 'colossus', 'turret', 'hound', 'sentinel', 'blaster']);
-      if (!card && tower) card = pick(['turret', 'spider', 'sentinel']);
-      if (!card) card = pick(['sentinel', 'hound', 'blaster', 'jet', 'spider', 'rocket', 'turret', 'titan']);
+      if (air) card = pick(['blaster', 'jet', 'arc', 'rail', 'rocket', 'cryo', 'hive', 'colossus']);
+      if (!card && swarm) card = pick(['scorcher', 'arc', 'rocket', 'emp', 'bombard', 'sentinel', 'colossus']);
+      if (!card && big) card = pick(['spider', 'cryo', 'rail', 'colossus', 'turret', 'hound', 'sentinel', 'blaster']);
+      if (!card && tower) card = pick(['turret', 'hive', 'spider', 'sentinel', 'scorcher']);
+      if (!card) card = pick(['sentinel', 'hound', 'blaster', 'arc', 'jet', 'spider', 'cryo', 'rocket', 'turret', 'scorcher', 'titan']);
       if (card && hp > 150) {
         const c = CB.CARDS[card]; let x, y;
         if (c.type === 'building') { x = clamp(front.x * 0.4 + 9 * 0.6, 6, 12); y = 7.5; }
+        else if (card === 'bombard') { x = clamp(front.x, 3, 15); y = 3; }
         else if (c.range > 3) { x = clamp(front.x, 2, 16); y = clamp(fy - 5.5, 2, 13); }
         else { x = clamp(front.x + rnd(-1, 1), 1, 17); y = clamp(fy - 2.5, 2, 13.5); }
         if (go(card, x, y)) return;
@@ -577,17 +673,17 @@
     if (en >= 8.5 - skill * 1.5 || (en >= 6 && Math.random() < 0.05)) {
       const lane = pickLane(tm);
       const lx = lane ? 14.5 : 3.5;
-      const tank = pick(['titan', 'colossus', 'sentinel', 'hound']);
+      const tank = pick(['titan', 'bomber', 'colossus', 'scorcher', 'cryo', 'sentinel', 'hound']);
       if (tank) {
-        const behind = tank === 'titan' || tank === 'colossus';
+        const behind = tank === 'titan' || tank === 'colossus' || tank === 'bomber';
         if (go(tank, lx + rnd(-0.5, 0.5), behind ? rnd(9, 13) : rnd(11, 13.5))) { ai.follow = { lane: lx, t: 2.5 }; return; }
       }
-      const any = pick(['rocket', 'blaster', 'jet', 'spider', 'medic', 'hound', 'sentinel']);
+      const any = pick(['rocket', 'boombot', 'blaster', 'arc', 'jet', 'rail', 'spider', 'medic', 'hound', 'sentinel']);
       if (any && en >= 9.5) { go(any, lx + rnd(-1, 1), rnd(10, 13)); return; }
     }
     // support a push that just went out
     if (ai.follow && (ai.follow.t -= 1) < 0) {
-      const sup = pick(['medic', 'rocket', 'blaster', 'jet', 'spider']);
+      const sup = pick(['medic', 'rocket', 'bombard', 'arc', 'rail', 'blaster', 'jet', 'boombot', 'spider']);
       if (sup) go(sup, ai.follow.lane + rnd(-1, 1), rnd(8, 12));
       ai.follow = null;
     }
@@ -774,15 +870,18 @@
     const sp = e.c.sprite; const team = TEAM[e.team];
     const af = Math.floor(e.atkT / FD);
     let lab = 'i' + (Math.floor(G.t * 3.2 + e.id * 0.37) % 4);
-    if (e.c.beam && e.anim === 'attack' && e.locked) lab = 'a' + (1 + Math.floor(G.t * 11) % 5);
+    if ((e.c.beam || e.c.cone) && e.anim === 'attack' && e.locked) lab = 'a' + (1 + Math.floor(G.t * 11) % 5);
+    else if (e.c.spawn) lab = af < 6 ? 'a' + af : 'i' + (Math.floor(G.t * 3.2) % 4);
     else if (e.kind === 'building') lab = af < 6 ? 'a' + af : 'i0';
     else if (af < 6 && (e.pend || e.anim === 'attack')) lab = 'a' + af;
     else if (e.air) lab = 'w' + (Math.floor(e.walkPh * 8 + G.t * 7) % 8);
     else if (e.anim === 'walk') lab = 'w' + (Math.floor(e.walkPh * 8) % 8);
     if (e.air && e.anim !== 'walk') e.walkPh += 0.01;
     const alpha = e.deploy > 0 ? 1 - e.deploy * 0.7 : 1;
-    if (!B.drawSprite(c, sp, team, lab, e.face, x, y, T * US, alpha)) fallback(c, e, x, y);
-    if (e.flash > 0) { c.save(); c.globalCompositeOperation = 'lighter'; B.drawSprite(c, sp, team, lab, e.face, x, y, T * US, Math.min(0.6, e.flash * 5)); c.restore(); }   // hit flash: the robot itself brightens
+    if (!B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), alpha)) fallback(c, e, x, y);
+    if (e.flash > 0) { c.save(); c.globalCompositeOperation = 'lighter'; B.drawSprite(c, sp, team, lab, e.face, x, y, T * US * (SPS[sp] || 1), Math.min(0.6, e.flash * 5)); c.restore(); }   // hit flash: the robot itself brightens
+    if (e.slowT > 0) { c.save(); c.globalCompositeOperation = 'lighter'; glow(c, x, y - T * e.r * US, T * e.r * US * 1.6, '150,230,255', 0.35); c.restore();
+      if (Math.random() < 0.15) G.fx.push({ type: 'spark', x: e.x + rnd(-0.4, 0.4), y: e.y + rnd(-0.3, 0.3), z: rnd(0.3, 1.4), vx: 0, vy: 0, vz: -0.4, t: 0, dur: 0.5, col: '#e8fbff', size: 0.05 }); }
     if (e.stun > 0) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = '#aef'; c.lineWidth = 2;
       for (let k = 0; k < 4; k++) { let px = x + rnd(-0.5, 0.5) * T, py = y - rnd(0.3, 1.3) * T * US; c.beginPath(); c.moveTo(px, py); for (let j = 0; j < 3; j++) { px += rnd(-8, 8); py += rnd(-8, 8); c.lineTo(px, py); } c.stroke(); } c.restore(); }
     if (e.charging) { c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = 'rgba(255,240,120,.8)'; c.lineWidth = 2; const bx_ = -Math.cos(e.face), by_ = -Math.sin(e.face);
@@ -796,10 +895,11 @@
   }
   // Colossus beam: wavy, layered, thicker and hotter the longer it holds one target.
   function drawBeam(c, u, e) {
-    const st = u.beamT < 2 ? 0 : u.beamT < 4 ? 1 : 2;
-    const tc = TCOL(u.team); const hot = ['255,255,255', '255,240,190', '255,250,230'][st];
-    const ox = u.x + Math.cos(u.face) * 1.6, oy = u.y + Math.sin(u.face) * 1.6;
-    const x0 = sx(ox), y0 = sy(oy, 2.0), x1 = sx(e.x), y1 = sy(e.y, e.air ? 1.8 : e.kind === 'tower' ? 1.5 : 0.7);
+    const st = u.c.ramp ? (u.beamT < 2 ? 0 : u.beamT < 4 ? 1 : 2) : 1;
+    const tc = u.c.frost ? ['#7fe6ff', '#e8fbff', '127,230,255'] : TCOL(u.team); const hot = u.c.frost ? '230,250,255' : ['255,255,255', '255,240,190', '255,250,230'][st];
+    const reach = u.c.frost ? 1.2 : 1.6, oz = u.c.frost ? 1.3 : 2.0;
+    const ox = u.x + Math.cos(u.face) * reach, oy = u.y + Math.sin(u.face) * reach;
+    const x0 = sx(ox), y0 = sy(oy, oz), x1 = sx(e.x), y1 = sy(e.y, e.air ? 1.8 : e.kind === 'tower' ? 1.5 : 0.7);
     const w = [4, 7, 12][st] * T / 24; const L = Math.hypot(x1 - x0, y1 - y0); const nx = -(y1 - y0) / L, ny = (x1 - x0) / L;
     c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
     const path = (amp, ph) => { c.beginPath(); for (let i = 0; i <= 14; i++) { const k = i / 14, wv = Math.sin(k * 9 + G.t * 30 + ph) * amp * Math.sin(k * Math.PI); c.lineTo(x0 + (x1 - x0) * k + nx * wv, y0 + (y1 - y0) * k + ny * wv); } c.stroke(); };
@@ -821,7 +921,7 @@
       return;
     }
     if (e.hp >= e.maxHp && e.kind !== 'building') return;
-    const h = e.air ? 1.6 : 0; const ht = { titan: 3.6, colossus: 4.6, rocket: 2.6, sentinel: 2.3, blaster: 2.0, spider: 0.8, turret: 1.8, jet: 1.0, medic: 1.6, hound: 1.6 }[e.card] || 2;
+    const h = e.air ? 1.6 : 0; const ht = { titan: 3.6, colossus: 4.6, rocket: 2.6, sentinel: 2.3, blaster: 2.0, spider: 0.8, turret: 1.8, jet: 1.0, medic: 1.6, hound: 1.6, rail: 2.6, arc: 2.3, scorcher: 1.5, bombard: 1.7, bomber: 1.3, hive: 1.9, minidrone: 0.5, boombot: 0.9, cryo: 2.6 }[e.card] || 2;
     const w = Math.max(T * 0.8, e.r * T * 1.8), x = sx(e.x) - w / 2, y = sy(e.y, h + ht * 0.82 * US * 1.08);
     c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(x - 1, y - 1, w + 2, 5);
     c.fillStyle = e.team ? '#ff5a45' : '#45b4ff'; c.fillRect(x, y, w * Math.max(0, e.hp / e.maxHp), 3);
@@ -838,6 +938,15 @@
       c.strokeStyle = tc[0]; c.globalAlpha = 0.45; c.lineWidth = T * 0.32; c.beginPath(); c.moveTo(sx(t0[0]), sy(t0[1], t0[2])); c.lineTo(X, Y); c.stroke();
       c.strokeStyle = tc[1]; c.globalAlpha = 1; c.lineWidth = T * 0.1; c.stroke();
       glow(c, X, Y, T * 0.55, tc[2], 0.9);
+    } else if (p.kind === 'mortar' || p.kind === 'bomb') {
+      glow(c, X, Y, T * 0.55, '255,170,70', 0.9); c.globalCompositeOperation = 'source-over'; c.fillStyle = '#2a2a2e';
+      c.beginPath(); c.arc(X, Y, T * (p.kind === 'bomb' ? 0.2 : 0.16), 0, 7); c.fill();
+      c.globalCompositeOperation = 'lighter'; glow(c, X, Y - T * 0.05, T * 0.12, '255,240,200', 1);
+    } else if (p.kind === 'minimissile') {
+      const dx = X - sx(t0[0]), dy = Y - sy(t0[1], t0[2]); const L = Math.hypot(dx, dy) || 1; const ux = dx / L, uy = dy / L;
+      c.globalCompositeOperation = 'source-over'; c.strokeStyle = '#eef'; c.lineWidth = T * 0.08; c.beginPath(); c.moveTo(X - ux * T * 0.25, Y - uy * T * 0.25); c.lineTo(X, Y); c.stroke();
+      c.globalCompositeOperation = 'lighter'; glow(c, X - ux * T * 0.3, Y - uy * T * 0.3, T * 0.3, '255,170,60', 1);
+      if (Math.random() < 0.7) G.fx.push({ type: 'smoke', x: p.x, y: p.y, z: p.z, t: 0, dur: 0.45, size: 0.1, vz: 0.2, light: true });
     } else if (p.kind === 'shell' || p.kind === 'tower') {
       const big = p.kind === 'tower';
       for (let i = 0; i < p.trail.length; i++) { const t = p.trail[i]; glow(c, sx(t[0]), sy(t[1], t[2]), T * (big ? 0.35 : 0.25) * (i + 1) / p.trail.length, big ? tc[2] : '255,170,70', 0.35); }
@@ -928,6 +1037,26 @@
           c.stroke();
         }
         glow(c, sx(f.x2), sy(f.y2, f.z), T * 0.6, '255,250,200', 1 - k);
+      } else if (f.type === 'rail') {   // piercing railgun line: white core, team glow, fading
+        const a = 1 - k, X1 = sx(f.x1), Y1 = sy(f.y1, f.z), X2 = sx(f.x2), Y2 = sy(f.y2, f.z * 0.6);
+        c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
+        for (const [w, al, col] of [[T * 0.9 * (1 - k * 0.5), 0.3, f.col[0]], [T * 0.38, 0.8, f.col[0]], [T * 0.12, 1, '#ffffff']]) { c.strokeStyle = col; c.globalAlpha = al * a; c.lineWidth = w; c.beginPath(); c.moveTo(X1, Y1); c.lineTo(X2, Y2); c.stroke(); }
+        for (let i = 0; i < 5; i++) { const q = (i + 0.5) / 5; glow(c, X1 + (X2 - X1) * q, Y1 + (Y2 - Y1) * q, T * 0.5 * (1 - k), f.col[2], a * 0.7); }
+      } else if (f.type === 'chain') {   // chain lightning between hits
+        c.globalCompositeOperation = 'lighter'; c.lineCap = 'round'; c.lineJoin = 'round';
+        for (const [w, al, col] of [[7, 0.35, f.col[0]], [3, 0.9, f.col[0]], [1.4, 1, '#ffffff']]) {
+          c.strokeStyle = col; c.globalAlpha = al * (1 - k); c.lineWidth = w; c.beginPath();
+          for (let i = 0; i < f.pts.length - 1; i++) { const A = f.pts[i], Bp = f.pts[i + 1]; for (let j = 0; j <= 6; j++) { const q = j / 6; const jit = (j % 6) ? 1 : 0; c.lineTo(sx(A[0] + (Bp[0] - A[0]) * q) + rnd(-7, 7) * jit, sy(A[1] + (Bp[1] - A[1]) * q, A[2] + (Bp[2] - A[2]) * q) + rnd(-7, 7) * jit); } }
+          c.stroke();
+        }
+        for (const q of f.pts) glow(c, sx(q[0]), sy(q[1], q[2]), T * 0.55, f.col[2], 1 - k);
+      } else if (f.type === 'flamep') {   // flamethrower particle: yellow, orange, then smoky red
+        f.x += f.vx * dt; f.y += f.vy * dt; f.z += 0.6 * dt; f.vx *= 0.97; f.vy *= 0.97;
+        c.globalCompositeOperation = 'lighter';
+        glow(c, sx(f.x), sy(f.y, f.z), T * f.size * (0.7 + k * 1.6), k < 0.35 ? '255,230,140' : k < 0.7 ? '255,140,40' : '200,60,20', (1 - k) * 0.9);
+      } else if (f.type === 'target') {   // where a shell or bomb will land
+        c.globalCompositeOperation = 'source-over'; c.strokeStyle = f.col; c.globalAlpha = 0.35 + 0.35 * Math.sin(k * 20); c.lineWidth = 2; c.setLineDash([5, 4]);
+        c.beginPath(); c.ellipse(sx(f.x), sy(f.y), f.R * T, f.R * T * CB.SIN, 0, 0, 7); c.stroke(); c.setLineDash([]);
       } else if (f.type === 'muzzle') {
         c.globalCompositeOperation = 'lighter'; glow(c, sx(f.x), sy(f.y, f.z), T * 0.5, '255,220,150', 1 - k);
       } else if (f.type === 'emp') {

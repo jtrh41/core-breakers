@@ -159,13 +159,13 @@
   }
   function stats(id, lvl) {
     const C = CB.CARDS[id], m = CB.LVL_MUL(lvl); const rows = [];
-    const tg = { ground: 'Ground', air: 'Air', both: 'Air & Ground', buildings: 'Buildings', allies: 'Repairs allies' };
+    const tg = { ground: 'Ground', air: 'Air', both: 'Air & Ground', buildings: 'Buildings', allies: 'Repairs allies', none: 'Launches drones' };
     if (C.hp) rows.push(['Health', Math.round(C.hp * m) + (C.count > 1 ? ' each' : '')]);
     if (C.beam) rows.push(['Beam damage', C.ramp.map(v => Math.round(v * m)).join(' → ') + ' per 0.4 s']);
     else if (C.heal) rows.push(['Repair', Math.round(C.heal * m) + ' per second']);
     else if (C.dmg) rows.push([C.type === 'spell' ? 'Area damage' : 'Damage', Math.round(C.dmg * m) + (C.splash ? ' splash' : '')]);
     if (C.towerPct) rows.push(['Tower damage', Math.round(C.dmg * m * C.towerPct)]);
-    if (C.hit && !C.beam && !C.heal && C.type !== 'spell') rows.push(['Hit speed', C.hit + ' s']);
+    if (C.hit && !C.beam && !C.heal && !C.spawn && C.type !== 'spell') rows.push(['Hit speed', C.hit + ' s']);
     if (C.type !== 'spell') rows.push(['Targets', tg[C.targets]]);
     if (C.range && C.type !== 'spell') rows.push(['Range', C.range < 1.2 ? 'Melee' : C.range]);
     if (C.speed) rows.push(['Speed', C.speed >= 1.4 ? 'Fast' : C.speed >= 0.95 ? 'Medium' : 'Slow']);
@@ -176,6 +176,13 @@
     if (C.life) rows.push(['Lifetime', C.life + ' s']);
     if (C.air) rows.push(['Flying', 'Yes']);
     if (C.charge) rows.push(['Charge', 'x2 damage']);
+    if (C.pierce) rows.push(['Pierce', C.pierce + ' tiles in a line']);
+    if (C.chain) rows.push(['Chain', 'jumps to ' + C.chain + ' more']);
+    if (C.cone) rows.push(['Flame cone', C.cone.r + ' tiles']);
+    if (C.minRange) rows.push(['Blind spot', 'closer than ' + C.minRange]);
+    if (C.spawn) rows.push(['Launches', C.spawn.n + ' drones / ' + C.hit + ' s']);
+    if (C.kamikaze) rows.push(['Explodes', 'on contact']);
+    if (C.frost) rows.push(['Slow', Math.round(C.frost.slow * 100) + '% for ' + C.frost.t + ' s']);
     return rows;
   }
   function detail(id) {
@@ -235,8 +242,8 @@
     const s = P.s; const a = P.arena();
     const pool = CB.CARD_ORDER.filter(id => CB.CARDS[id].arena <= a);
     const pick = new Set();
-    const tanks = pool.filter(id => ['titan', 'colossus', 'sentinel', 'hound'].includes(id));
-    const anti = pool.filter(id => ['blaster', 'jet', 'rocket'].includes(id));
+    const tanks = pool.filter(id => ['titan', 'colossus', 'sentinel', 'hound', 'scorcher', 'cryo', 'bomber'].includes(id));
+    const anti = pool.filter(id => ['blaster', 'jet', 'rocket', 'arc', 'rail'].includes(id));
     pick.add(tanks[Math.floor(Math.random() * tanks.length)]); pick.add(anti[Math.floor(Math.random() * anti.length)]);
     while (pick.size < 8) pick.add(pool[Math.floor(Math.random() * pool.length)]);
     const myLv = {}; s.deck.forEach(id => myLv[id] = s.cards[id].lvl);
@@ -250,6 +257,7 @@
     const need = new Set(['guard', 'king', 'guardx', 'kingx']);
     for (const id of s.deck) if (CB.CARDS[id].sprite) need.add(CB.CARDS[id].sprite + '_blue');
     for (const id of pick) if (CB.CARDS[id].sprite) need.add(CB.CARDS[id].sprite + '_red');
+    if (s.deck.includes('hive')) need.add('minidrone_blue'); if (pick.has('hive')) need.add('minidrone_red');
     const ld = $('loading'); ld.classList.remove('gone'); ld.querySelector('p').textContent = 'Deploying robots…'; $('lfill').style.width = '0%';
     Promise.all([CB.B.loadSprites([...need], p => $('lfill').style.width = Math.round(p * 100) + '%'), CB.B.loadArena(a)]).then(() => { ld.classList.add('gone'); }).then(() => CB.B.start({
       deck: s.deck.slice(), levels: myLv, cmd: s.cmd, arena: a,
