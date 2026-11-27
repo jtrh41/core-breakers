@@ -1,2 +1,2 @@
-// Written by tools/portraitcards.py
-CB.PORT_V = 'd46cae2259';
+// Written by tools/artcards.py
+CB.PORT_V = '72d474b5bc';
