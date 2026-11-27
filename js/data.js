@@ -66,7 +66,7 @@ CB.CARD_ORDER = ['sentinel', 'blaster', 'spider', 'turret', 'jet', 'emp', 'titan
 CB.START_DECK = ['sentinel', 'blaster', 'spider', 'turret', 'jet', 'emp', 'titan', 'missile'];
 
 CB.TOWERS = {
-  guard: { hp: 1500, dmg: 52, hit: 0.8, range: 7.5, radius: 1.45, sprite: 'guard' },
+  guard: { hp: 1500, dmg: 52, hit: 0.8, range: 8.5, radius: 1.45, sprite: 'guard' },
   king:  { hp: 2600, dmg: 60, hit: 1.0, range: 7.0, radius: 1.9, sprite: 'king' },
 };
 

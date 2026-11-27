@@ -129,9 +129,9 @@
     };
     for (const tm of [0, 1]) {
       const fy = y => tm ? H - y : y;
-      G.ents.push(mkTower(tm, 'guard', 3.5, fy(26.5), 0, tm ? cmdAi : cmdMe));
-      G.ents.push(mkTower(tm, 'guard', 14.5, fy(26.5), 1, tm ? cmdAi : cmdMe));
-      G.ents.push(mkTower(tm, 'king', 9, fy(28.5), -1, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'guard', 3.5, fy(28), 0, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'guard', 14.5, fy(28), 1, tm ? cmdAi : cmdMe));
+      G.ents.push(mkTower(tm, 'king', 9, fy(29.6), -1, tm ? cmdAi : cmdMe));
     }
     renderHand(); layout(); buildBg();
     B.running = true; last = performance.now(); acc = 0;
@@ -605,9 +605,9 @@
       ai: { think: 1.5, lvl: opt.enemy.skill }, ai0: { think: 1.5, lvl: opt.skill }, arena: 0, sim: true };
     for (const tm of [0, 1]) {
       const fy = y => tm ? H - y : y;
-      G.ents.push(mkTower(tm, 'guard', 3.5, fy(26.5), 0, tm ? opt.enemy.cmd : opt.cmd));
-      G.ents.push(mkTower(tm, 'guard', 14.5, fy(26.5), 1, tm ? opt.enemy.cmd : opt.cmd));
-      G.ents.push(mkTower(tm, 'king', 9, fy(28.5), -1, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'guard', 3.5, fy(28), 0, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'guard', 14.5, fy(28), 1, tm ? opt.enemy.cmd : opt.cmd));
+      G.ents.push(mkTower(tm, 'king', 9, fy(29.6), -1, tm ? opt.enemy.cmd : opt.cmd));
     }
     let res = null; opt.onEnd = r => { res = r; };
     let n = 0;
@@ -643,9 +643,9 @@
     VW = box.width; VH = box.height;
     c.width = Math.round(VW * DPR); c.height = Math.round(VH * DPR); c.style.width = VW + 'px'; c.style.height = VH + 'px';
     ctx = c.getContext('2d');
-    const needH = H * CB.SIN + 2.6;   // arena plus room for tall sprites at the top
+    const needH = H * CB.SIN + 3.4;   // arena plus room for the back towers' sprites and health bars at the top
     T = Math.min(VW / (W + 0.6), VH / needH);
-    OX = (VW - W * T) / 2; OY = (VH - H * T * CB.SIN) / 2 + T * 0.9;
+    OX = (VW - W * T) / 2; OY = (VH - H * T * CB.SIN) / 2 + T * 1.45;
   }
   B.layout = () => { if (G) { layout(); buildBg(); } };
 
@@ -728,6 +728,13 @@
     }
     G.scorch = G.scorch.filter(s => !s.done);
     drawPlacement(c);
+    // tower pads: a dark stone ring with the team's light
+    for (const e of G.ents) if (e.kind === 'tower') {
+      const rx = (e.r + 0.15) * T, ry = rx * CB.SIN, tc = TCOL(e.team);
+      c.fillStyle = 'rgba(10,12,16,.35)'; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx, ry, 0, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = T * 0.16; c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * 0.96, ry * 0.96, 0, 0, 7); c.stroke();
+      c.strokeStyle = tc[0]; c.globalAlpha = e.alive ? 0.75 : 0.25; c.lineWidth = Math.max(1.5, T * 0.07); c.beginPath(); c.ellipse(sx(e.x), sy(e.y), rx * 0.96, ry * 0.96, 0, 0, 7); c.stroke(); c.globalAlpha = 1;
+    }
     for (const d of G.decals) B.drawSprite(c, d.sub === 'king' ? 'kingx' : 'guardx', TEAM[d.team], 'i0', 0, sx(d.x), sy(d.y), T * 0.85);
     // shadows + team rings under every robot
     for (const e of G.ents) if (e.alive && e.kind !== 'tower') {
