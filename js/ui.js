@@ -326,6 +326,8 @@
       [['Yes, start over', () => { P.reset(); closeModal(); UI.show('home'); }], ['Cancel', closeModal]]);
     CB.B.bindInput();
     UI.show('home');
+    const gift = P.claimGift();
+    if (gift) { modal(`<div class="burst"></div><h2>🎁 ${gift.text}</h2><div class="goldWin">+${gift.gold.toLocaleString()} 🪙</div><p class="dim">Use it to upgrade your cards in the Cards tab.</p>`, [['Awesome!', () => { closeModal(); UI.show('home'); }]]); CB.B.sfx('win'); topbar(); }
     setInterval(() => { if (screen === 'home') home(); topbar(); }, 1000);
   };
 })();

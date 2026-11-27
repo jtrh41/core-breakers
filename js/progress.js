@@ -163,6 +163,19 @@
   P.CHEST_PRICES = { gold: 250, magic: 900 };
   P.buyChest = type => { const p = P.CHEST_PRICES[type]; if (!p || S.gold < p) return null; S.gold -= p; return P.openChest(type); };
 
+  // ---------- one-time gifts (from the family, given on the next app open) ----------
+  P.GIFTS = [{ id: 'gold10k-2026-11-26', gold: 10000, before: Date.parse('2026-11-27T04:00:00Z'), text: 'A gift for you!' }];
+  P.claimGift = () => {
+    S.gifts = S.gifts || [];
+    for (const g of P.GIFTS) {
+      if (S.gifts.includes(g.id)) continue;
+      S.gifts.push(g.id);
+      if ((S.created || 0) >= g.before) { P.save(); continue; }   // only saves that existed when the gift was made
+      S.gold += g.gold; P.save(); return g;
+    }
+    return null;
+  };
+
   // ---------- backup code ----------
   function sum(str) { let h = 7; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h.toString(36); }
   P.backupCode = () => { const j = JSON.stringify(S); const b = btoa(unescape(encodeURIComponent(j))); return 'CB1.' + sum(b) + '.' + b; };
