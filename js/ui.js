@@ -184,6 +184,20 @@
     if (C.spawn) rows.push(['Launches', C.spawn.n + ' drones / ' + C.hit + ' s']);
     if (C.kamikaze) rows.push(['Explodes', 'on contact']);
     if (C.frost) rows.push(['Slow', Math.round(C.frost.slow * 100) + '% for ' + C.frost.t + ' s']);
+    const o = C.on || {}, L = CB.LVL_MUL(lvl);
+    if (o.bash) rows.push(['💫 Shield Bash', 'every ' + o.bash.every + 'rd hit, stun ' + o.bash.stun + ' s']);
+    if (o.melt) rows.push(['🛡 Armour Melt', '+' + Math.round(o.melt.amp * 100) + '% damage taken, ' + o.melt.t + ' s']);
+    if (o.poison) rows.push(['☠ Poison', Math.round(o.poison.dps * L) + '/s per bite, up to ' + o.poison.max]);
+    if (o.suppress) rows.push(['📌 Pin down', 'attacks ' + Math.round(o.suppress.amt * 100) + '% slower']);
+    if (o.antiair) rows.push(['✈ Dogfighter', '+' + Math.round((o.antiair - 1) * 100) + '% vs flyers']);
+    if (o.quake) rows.push(['💥 Quake', Math.round(o.quake.pct * 100) + '% damage + throw back']);
+    if (o.chargeStun) rows.push(['💫 Stun bite', o.chargeStun + ' s after a charge']);
+    if (o.shock) rows.push(['⚡ Shock', 'stops enemies ' + o.shock + ' s']);
+    if (o.stun) rows.push(['💫 Daze', o.stun + ' s']);
+    if (o.knock) rows.push(['↩ Knockback', o.knock + ' tiles']);
+    if (o.freeze) rows.push(['❄ Freeze', 'after ' + o.freeze.need * C.hit + ' s of beam, ' + o.freeze.t + ' s']);
+    if (o.burn) rows.push(['🔥 Burn', Math.round(o.burn.dps * L) + '/s for ' + o.burn.t + ' s']);
+    if (o.firezone) rows.push(['🔥 Firebombs', 'burning ground ' + Math.round(o.firezone.dps * L) + '/s']);
     return rows;
   }
   function detail(id) {
